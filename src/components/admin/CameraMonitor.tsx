@@ -8,6 +8,7 @@ import { TeacherWebRTC } from '@/lib/webrtc'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MagneticButton } from '@/components/ui/magnetic-button'
 import { VideoStream } from '@/components/ui/video-stream'
+import TeacherVideoDisplay from './TeacherVideoDisplay'
 import { 
   X, 
   Camera, 
@@ -86,25 +87,37 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
       
       // Handle incoming student streams
       webrtc.onStudentStreamReceived = (studentId: string, stream: MediaStream) => {
-        console.log('Received stream from student:', studentId)
+        console.log('🎥 RECEIVED STREAM from student:', studentId)
+        console.log('Stream details:', {
+          id: stream.id,
+          active: stream.active,
+          videoTracks: stream.getVideoTracks().length,
+          audioTracks: stream.getAudioTracks().length
+        })
+        
+        // Check stream tracks
+        stream.getVideoTracks().forEach((track, index) => {
+          console.log(`Video track ${index}:`, {
+            enabled: track.enabled,
+            readyState: track.readyState,
+            settings: track.getSettings()
+          })
+        })
         
         // Update student list with stream
-        setStudents(prev => prev.map(student => 
-          student.student_id === studentId 
-            ? { ...student, stream }
-            : student
-        ))
-        
-        // Update video element if it exists
-        const videoElement = videoRefs.current.get(studentId)
-        if (videoElement) {
-          videoElement.srcObject = stream
-          videoElement.play().catch(console.error)
-        }
+        setStudents(prev => {
+          const updated = prev.map(student => 
+            student.student_id === studentId 
+              ? { ...student, stream }
+              : student
+          )
+          console.log('Updated students with stream:', updated.find(s => s.student_id === studentId))
+          return updated
+        })
       }
       
       // Handle connection status
-      webrtc.onConnectionStateChange = (studentId: string, state: string) => {
+      (webrtc as any).onConnectionStateChange = (studentId: string, state: string) => {
         console.log(`Student ${studentId} connection state:`, state)
         if (state === 'connected') {
           console.log(`Live video established with student ${studentId}`)
@@ -215,16 +228,17 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
               <div className="h-2 bg-gradient-to-r from-blue-500 via-cyan-500 to-purple-500" />
               
               <CardHeader className="relative">
+                {/* X Close Button - Higher z-index and better positioning */}
                 <motion.button
                   whileHover={{ scale: 1.1, rotate: 90 }}
                   whileTap={{ scale: 0.9 }}
                   onClick={selectedStudent ? () => setSelectedStudent(null) : onClose}
-                  className="absolute right-4 top-4 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                  className="absolute right-2 top-2 z-50 p-3 rounded-full bg-red-500/20 hover:bg-red-500/30 border border-red-200/50 backdrop-blur-sm transition-colors shadow-lg"
                 >
-                  <X className="w-5 h-5" />
+                  <X className="w-5 h-5 text-red-600" />
                 </motion.button>
                 
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between pr-16">
                   <div>
                     <CardTitle className="text-2xl font-bold flex items-center gap-3">
                       <Monitor className="w-8 h-8 text-blue-600" />
@@ -286,8 +300,9 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                           
                           <div className="bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center relative">
                             {student.camera_enabled && student.stream ? (
-                              <VideoStream
-                                stream={student.stream}
+                              <TeacherVideoDisplay 
+                                stream={student.stream} 
+                                studentId={student.student_id}
                                 className="w-full h-full object-cover"
                               />
                             ) : student.camera_enabled ? (
@@ -397,8 +412,9 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                         >
                           <div className="aspect-video bg-black flex items-center justify-center relative overflow-hidden">
                             {student.camera_enabled && student.stream ? (
-                              <VideoStream
-                                stream={student.stream}
+                              <TeacherVideoDisplay 
+                                stream={student.stream} 
+                                studentId={student.student_id}
                                 className="w-full h-full object-cover"
                               />
                             ) : student.camera_enabled ? (

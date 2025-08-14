@@ -38,6 +38,7 @@ interface StudentProgress {
   warning_count?: number
   is_flagged?: boolean
   last_activity_at?: string
+  joined_session?: boolean
 }
 
 interface RealTimeStudentProgressProps {
@@ -70,12 +71,39 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
       if (showLoading) {
         setLoading(true)
       }
-      // Get all participants and their progress
-      const { data: progressData, error } = await supabase
+
+      // First, get all teacher's students for this class level to pre-populate
+      const { data: allTeacherStudents, error: teacherStudentsError } = await supabase
+        .from('teacher_students')
+        .select('*')
+        .eq('teacher_id', session.teacher_id)
+        .eq('class_level', session.class_level)
+        .eq('is_active', true)
+
+      if (teacherStudentsError) throw teacherStudentsError
+
+      // Get exam details to get the total number of questions for this session
+      const { data: examData, error: examError } = await supabase
+        .from('exams')
+        .select('total_questions')
+        .eq('id', session.exam_id)
+        .single()
+      
+      if (examError) {
+        console.error('Error fetching exam details:', examError)
+      }
+      
+      const examTotalQuestions = examData?.total_questions || 0
+      console.log('Exam total questions for session:', examTotalQuestions)
+
+      // Get actual exam progress for students who have attempts
+      console.log('Fetching progress for session:', session.id)
+      const { data: progressData, error: progressError } = await supabase
         .from('student_exam_attempts')
         .select(`
           *,
-          students:student_id (
+          students!inner (
+            id,
             student_id,
             full_name,
             class_level
@@ -88,15 +116,18 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
           )
         `)
         .eq('session_id', session.id)
+      
+      console.log('Progress query response:', { progressData, progressError })
 
-      if (error) throw error
+      if (progressError) throw progressError
 
-      // Also get students who joined but haven't started
+      // Get session participants to track who joined
       const { data: participantData, error: participantError } = await supabase
         .from('session_participants')
         .select(`
           *,
-          students (
+          students!inner (
+            id,
             student_id,
             full_name,
             class_level
@@ -106,31 +137,51 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
 
       if (participantError) throw participantError
 
-      // Combine and format data
+      // Create a map to build the complete student list
       const progressMap = new Map()
-      
-      // Add participants who haven't started
+
+      // First, pre-populate with ALL teacher's students for this class
+      allTeacherStudents?.forEach(teacherStudent => {
+        progressMap.set(teacherStudent.student_id, {
+          id: teacherStudent.id,
+          student_id: teacherStudent.student_id,
+          full_name: teacherStudent.full_name,
+          class_level: teacherStudent.class_level,
+          status: 'not_started' as const,
+          total_questions: examTotalQuestions,
+          warning_count: 0,
+          is_flagged: false,
+          joined_session: false
+        })
+      })
+
+      // Update with participants who joined the session
       participantData?.forEach(participant => {
         if (participant.students) {
-          progressMap.set(participant.student_id, {
-            id: participant.student_id,
+          const existing = progressMap.get(participant.students.student_id) || {}
+          progressMap.set(participant.students.student_id, {
+            ...existing,
+            id: participant.students.id,
             student_id: participant.students.student_id,
             full_name: participant.students.full_name,
             class_level: participant.students.class_level,
             status: 'not_started' as const,
-            total_questions: 0,
+            total_questions: examTotalQuestions,
             warning_count: 0,
-            is_flagged: false
+            is_flagged: false,
+            joined_session: true
           })
         }
       })
 
-      // Update with actual progress data
+      // Finally, update with actual exam progress
       progressData?.forEach(attempt => {
         if (attempt.students) {
           const result = attempt.exam_results?.[0]
-          progressMap.set(attempt.student_id, {
-            id: attempt.student_id,
+          const existing = progressMap.get(attempt.students.student_id) || {}
+          progressMap.set(attempt.students.student_id, {
+            ...existing,
+            id: attempt.students.id,
             student_id: attempt.students.student_id,
             full_name: attempt.students.full_name,
             class_level: attempt.students.class_level,
@@ -139,13 +190,14 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
             completed_at: attempt.completed_at,
             time_remaining: attempt.time_remaining,
             current_question_index: attempt.current_question_index || 0,
-            total_questions: result?.total_questions || 0,
+            total_questions: examTotalQuestions, // Use exam's total questions (same for all students)
             score: result?.correct_answers || 0,
             percentage_score: result?.percentage_score || 0,
             passed: result?.passed || false,
             warning_count: attempt.warning_count || 0,
             is_flagged: attempt.is_flagged || false,
-            last_activity_at: attempt.last_activity_at
+            last_activity_at: attempt.last_activity_at,
+            joined_session: true
           })
         }
       })
@@ -169,8 +221,10 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
     const inProgress = students.filter(s => s.status === 'in_progress').length
     const completed = students.filter(s => s.status === 'completed' || s.status === 'submitted').length
     const flagged = students.filter(s => s.is_flagged).length
+    const joined = students.filter(s => s.joined_session).length
+    const notJoined = students.filter(s => !s.joined_session).length
     
-    return { notStarted, inProgress, completed, flagged, total: students.length }
+    return { notStarted, inProgress, completed, flagged, joined, notJoined, total: students.length }
   }, [students])
 
   const getStatusIcon = (status: string) => {
@@ -278,19 +332,26 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
 
           {/* Stats */}
           <div className="bg-gray-50 p-4 border-b">
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
               <Card className="p-3">
                 <div className="text-center">
                   <Users className="w-6 h-6 mx-auto mb-1 text-gray-500" />
                   <div className="font-bold text-lg">{stats.total}</div>
-                  <div className="text-sm text-gray-600">Total</div>
+                  <div className="text-sm text-gray-600">Total Students</div>
                 </div>
               </Card>
               <Card className="p-3">
                 <div className="text-center">
-                  <Clock className="w-6 h-6 mx-auto mb-1 text-gray-500" />
-                  <div className="font-bold text-lg">{stats.notStarted}</div>
-                  <div className="text-sm text-gray-600">Not Started</div>
+                  <CheckCircle className="w-6 h-6 mx-auto mb-1 text-green-500" />
+                  <div className="font-bold text-lg">{stats.joined}</div>
+                  <div className="text-sm text-gray-600">Joined Session</div>
+                </div>
+              </Card>
+              <Card className="p-3">
+                <div className="text-center">
+                  <Clock className="w-6 h-6 mx-auto mb-1 text-orange-500" />
+                  <div className="font-bold text-lg">{stats.notJoined}</div>
+                  <div className="text-sm text-gray-600">Not Joined</div>
                 </div>
               </Card>
               <Card className="p-3">
@@ -302,7 +363,7 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
               </Card>
               <Card className="p-3">
                 <div className="text-center">
-                  <CheckCircle className="w-6 h-6 mx-auto mb-1 text-green-500" />
+                  <Trophy className="w-6 h-6 mx-auto mb-1 text-green-500" />
                   <div className="font-bold text-lg">{stats.completed}</div>
                   <div className="text-sm text-gray-600">Completed</div>
                 </div>
@@ -348,7 +409,15 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
                               {getStatusIcon(student.status)}
                             </div>
                             <div>
-                              <h3 className="font-semibold text-gray-900">{student.full_name}</h3>
+                              <div className="flex items-center space-x-2 mb-1">
+                                <h3 className="font-semibold text-gray-900">{student.full_name}</h3>
+                                {!student.joined_session && (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                                    <Clock className="w-3 h-3 mr-1" />
+                                    Not Joined
+                                  </span>
+                                )}
+                              </div>
                               <div className="flex items-center space-x-2 text-sm text-gray-500">
                                 <Hash className="w-3 h-3" />
                                 <span className="font-mono">{student.student_id}</span>
@@ -363,7 +432,7 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
                         {/* Status */}
                         <div className="flex items-center space-x-2">
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(student.status)}`}>
-                            {getStatusText(student.status)}
+                            {student.joined_session ? getStatusText(student.status) : 'Not Joined'}
                           </span>
                           {student.is_flagged && (
                             <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
@@ -378,12 +447,12 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
                           {student.status === 'in_progress' ? (
                             <div>
                               <div className="text-sm text-gray-600 mb-1">
-                                Question {student.current_question_index} of {student.total_questions}
+                                Question {student.current_question_index || 0} of {student.total_questions}
                               </div>
                               <div className="w-full bg-gray-200 rounded-full h-2">
                                 <div 
                                   className="bg-blue-500 h-2 rounded-full transition-all duration-300" 
-                                  style={{ width: `${getProgressPercentage(student.current_question_index, student.total_questions)}%` }}
+                                  style={{ width: `${getProgressPercentage(student.current_question_index || 0, student.total_questions)}%` }}
                                 ></div>
                               </div>
                             </div>

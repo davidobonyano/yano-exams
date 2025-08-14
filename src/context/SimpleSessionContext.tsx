@@ -15,6 +15,7 @@ interface SessionData {
   student_id: string
   teacher_id?: string
   camera_monitoring_enabled?: boolean
+  show_results_after_submit?: boolean
   can_resume?: boolean
   attempt_id?: string
   time_remaining?: number
@@ -33,6 +34,7 @@ interface SessionContextType {
       id: string
       session_code: string
       camera_monitoring_enabled?: boolean
+      show_results_after_submit?: boolean
       teacher_id: string
     }
     exam: {
@@ -95,6 +97,7 @@ export function SimpleSessionProvider({ children }: { children: ReactNode }) {
       id: sessionData.session_id,
       session_code: sessionData.session_code || sessionData.session_id.slice(-6),
       camera_monitoring_enabled: sessionData.camera_monitoring_enabled || false,
+      show_results_after_submit: sessionData.show_results_after_submit ?? false,
       teacher_id: sessionData.teacher_id || 'unknown'
     },
     exam: {

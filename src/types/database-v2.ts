@@ -36,6 +36,7 @@ export interface ExamSession {
   instructions?: string
   camera_monitoring_enabled?: boolean
   camera_access_required?: boolean
+  show_results_after_submit?: boolean
   created_at: string
   updated_at: string
 }

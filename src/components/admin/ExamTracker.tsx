@@ -86,7 +86,7 @@ export default function ExamTracker({ session, onClose }: ExamTrackerProps) {
   const [autoRefresh, setAutoRefresh] = useState(false) // Disabled by default
   const [showWarningModal, setShowWarningModal] = useState(false)
   const [selectedAttemptForWarning, setSelectedAttemptForWarning] = useState<StudentAttempt | null>(null)
-  const intervalRef = useRef<NodeJS.Timeout>()
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     fetchData()
@@ -161,7 +161,7 @@ export default function ExamTracker({ session, onClose }: ExamTrackerProps) {
       setCheatingIncidents(
         (cheatingData || []).map(incident => ({
           ...incident,
-          student_name: incident.students?.full_name || 'Unknown Student'
+          student_name: (incident as any).students?.full_name || 'Unknown Student'
         }))
       )
     } catch (error) {

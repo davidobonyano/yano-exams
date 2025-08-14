@@ -4,10 +4,11 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 import { FloatingInput } from '@/components/ui/floating-input'
 import { ModernBackground } from '@/components/ui/modern-background'
 import { TextReveal, GradientText } from '@/components/ui/text-effects'
-import { BookOpen, User, Hash, Award, Loader2, CheckCircle } from 'lucide-react'
+import { BookOpen, User, Hash, Award, CheckCircle, Play } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface StudentLoginProps {
@@ -24,9 +25,10 @@ interface StudentLoginProps {
     attempt_id?: string
     time_remaining?: number
   }) => void
+  onStartDemo?: () => void
 }
 
-export default function SimpleStudentLogin({ onLoginSuccess }: StudentLoginProps) {
+export default function SimpleStudentLogin({ onLoginSuccess, onStartDemo }: StudentLoginProps) {
   const [sessionCode, setSessionCode] = useState('')
   const [studentId, setStudentId] = useState('')
   const [loading, setLoading] = useState(false)
@@ -37,8 +39,8 @@ export default function SimpleStudentLogin({ onLoginSuccess }: StudentLoginProps
       return
     }
 
-    if (sessionCode.length !== 6 || !/^\d{6}$/.test(sessionCode)) {
-      toast.error('Session code must be exactly 6 digits')
+    if (sessionCode.length !== 6 || !/^[A-Za-z0-9]{6}$/.test(sessionCode)) {
+      toast.error('Session code must be exactly 6 characters')
       return
     }
 
@@ -73,13 +75,18 @@ export default function SimpleStudentLogin({ onLoginSuccess }: StudentLoginProps
       
       onLoginSuccess({
         student_name: result.student_name,
+        student_class_level: result.student_class_level,
         session_id: result.session_id,
+        session_code: result.session_code,
         exam_id: result.exam_id,
         exam_title: result.exam_title,
         duration_minutes: result.duration_minutes,
         instructions: result.instructions,
         participant_id: result.participant_id,
         student_id: result.student_id,
+        teacher_id: result.teacher_id,
+        camera_monitoring_enabled: result.camera_monitoring_enabled,
+        show_results_after_submit: result.show_results_after_submit,
         can_resume: status.can_resume || false,
         attempt_id: status.attempt_id,
         time_remaining: status.time_remaining
@@ -172,16 +179,16 @@ export default function SimpleStudentLogin({ onLoginSuccess }: StudentLoginProps
                     icon={<Hash className="w-5 h-5" />}
                     value={sessionCode}
                     onChange={(e) => {
-                      const value = e.target.value.replace(/\D/g, '').slice(0, 6)
+                      const value = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6)
                       setSessionCode(value)
                     }}
                     onKeyPress={handleKeyPress}
-                    placeholder="000000"
+                    placeholder="A1B2C3"
                     className="text-center text-xl font-mono tracking-widest h-14"
                     maxLength={6}
                   />
                   <p className="text-xs text-gray-500 mt-2 text-center">
-                    6-digit code from your teacher
+                    6-character code from your teacher
                   </p>
                 </motion.div>
 
@@ -235,6 +242,28 @@ export default function SimpleStudentLogin({ onLoginSuccess }: StudentLoginProps
                   </button>
                 </motion.div>
 
+                {/* Take Demo Exam Section */}
+                {onStartDemo && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 1.9, duration: 0.6 }}
+                    className="pt-2"
+                  >
+                    <div className="space-y-3">
+                      <h3 className="font-semibold text-gray-800 text-center">Practice First</h3>
+                      <Button
+                        onClick={onStartDemo}
+                        variant="outline"
+                        className="w-full border-green-300 text-green-700 hover:bg-green-50 h-12"
+                      >
+                        <Play className="w-4 h-4 mr-2" />
+                        Take Demo Exam
+                      </Button>
+                    </div>
+                  </motion.div>
+                )}
+
                 {/* Instructions */}
                 <motion.div
                   initial={{ opacity: 0 }}
@@ -263,7 +292,7 @@ export default function SimpleStudentLogin({ onLoginSuccess }: StudentLoginProps
                       <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white font-bold text-xs">
                         3
                       </div>
-                      <span>Click "Access Exam" to begin</span>
+                      <span>Click &quot;Access Exam&quot; to begin</span>
                     </div>
                   </div>
                 </motion.div>

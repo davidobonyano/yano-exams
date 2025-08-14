@@ -8,6 +8,8 @@ import { Exam, Question, UserExamAttempt, UserAnswer } from '@/types/database'
 import PersistentExamTimer from './PersistentExamTimer'
 import QuestionDisplay from './QuestionDisplay'
 import ExamInstructions from './ExamInstructions'
+import StudentWarningDisplay from './StudentWarningDisplay'
+import { calculateAndSaveScore, validateAndMarkAnswers } from '@/lib/auto-scoring'
 
 interface ExamInterfaceProps {
   examId: string
@@ -309,6 +311,26 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
 
       if (updateError) throw updateError
 
+      // First validate and mark all answers as correct/incorrect
+      const answersArray = Object.entries(answers).map(([questionId, answer]) => ({
+        questionId,
+        answer
+      }))
+      
+      console.log('Validating answers for attempt:', attempt.id, answersArray)
+      const validationResult = await validateAndMarkAnswers(attempt.id, answersArray)
+      console.log('Answer validation result:', validationResult)
+
+      // Calculate and save the exam score
+      console.log('Calculating exam score for attempt:', attempt.id)
+      const scoringResult = await calculateAndSaveScore(attempt.id)
+      
+      if (scoringResult.success) {
+        console.log('Exam score calculated successfully:', scoringResult)
+      } else {
+        console.error('Failed to calculate exam score:', scoringResult.error)
+      }
+
       // Redirect to dashboard instead of results (results are now teacher-controlled)
       router.push('/dashboard?examSubmitted=true')
     } catch (err: any) {
@@ -378,6 +400,15 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
 
   return (
     <div className="min-h-screen bg-gray-50" style={{ userSelect: 'none' }}>
+      {/* Student Warning Display */}
+      {attempt && profile && (
+        <StudentWarningDisplay
+          sessionId="standalone"
+          studentId={profile.id}
+          attemptId={attempt.id}
+        />
+      )}
+
       {/* Network Status */}
       {!isOnline && (
         <div className="bg-red-500 text-white text-center py-2">

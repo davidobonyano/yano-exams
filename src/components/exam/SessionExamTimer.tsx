@@ -61,7 +61,7 @@ export default function SessionExamTimer({ duration, attempt, onTimeUp, isPaused
       supabase
         .from('student_exam_attempts')
         .update({
-          offline_duration: supabase.sql`COALESCE(offline_duration, 0) + ${offlineDuration}`,
+          offline_duration: offlineDuration,
           last_activity_at: new Date().toISOString()
         })
         .eq('id', attempt.id)

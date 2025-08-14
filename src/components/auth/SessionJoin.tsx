@@ -26,7 +26,7 @@ const CLASS_LEVELS: { value: ClassLevel; label: string }[] = [
 ]
 
 const formSchema = z.object({
-  sessionCode: z.string().regex(/^\d{6}$/, 'Session code must be exactly 6 digits'),
+  sessionCode: z.string().regex(/^[A-Za-z0-9]{6}$/, 'Session code must be exactly 6 characters'),
   studentId: z.string().min(1, 'Student ID is required'),
   fullName: z.string().min(2, 'Full name must be at least 2 characters'),
   classLevel: z.enum(['JSS1', 'JSS2', 'JSS3', 'SS1', 'SS2', 'SS3']),
@@ -197,12 +197,12 @@ export default function SessionJoin() {
                         {...form.register('sessionCode')}
                         error={form.formState.errors.sessionCode?.message}
                         onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, '').slice(0, 6)
+                          const value = e.target.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase().slice(0, 6)
                           form.setValue('sessionCode', value)
                         }}
                       />
                       <p className="text-sm text-gray-500 mt-2 text-center">
-                        Get the 6-digit code from your teacher
+                        Get the 6-character code from your teacher
                       </p>
                     </motion.div>
 

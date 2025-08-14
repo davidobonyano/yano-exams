@@ -30,14 +30,109 @@ export interface ExamResult {
   created_at: string
 }
 
+export interface DetailedAnswer {
+  question_number: number
+  question_id: string
+  question_text: string
+  question_type: string
+  question_points: number
+  options?: any
+  correct_answer_key: string
+  correct_answer_text: string
+  student_answer_key: string
+  student_answer_text: string
+  is_correct: boolean
+  points_earned: number
+  answered_at?: string
+  explanation?: string
+}
+
+export interface DetailedStudentResult {
+  success: boolean
+  attempt_info: {
+    attempt_id: string
+    student_id: string
+    student_name: string
+    student_email: string
+    exam_id: string
+    exam_title: string
+    session_id: string
+    session_name: string
+    status: string
+    started_at: string
+    completed_at?: string
+    submitted_at?: string
+    total_questions: number
+    correct_answers: number
+    total_points: number
+    points_earned: number
+    percentage_score: number
+    passed: boolean
+    passing_score: number
+  }
+  detailed_answers: DetailedAnswer[]
+  error?: string
+}
+
+export interface SessionDetailedResults {
+  success: boolean
+  session_info: {
+    session_id: string
+    session_name: string
+    exam_id: string
+    exam_title: string
+    exam_description?: string
+    total_questions: number
+    passing_score: number
+    duration_minutes?: number
+    created_at: string
+    status: string
+    total_participants: number
+    completed_participants: number
+  }
+  students_results: Array<{
+    attempt_id: string
+    student_id: string
+    student_name: string
+    student_email: string
+    status: string
+    started_at: string
+    completed_at?: string
+    submitted_at?: string
+    total_questions: number
+    correct_answers: number
+    total_points: number
+    points_earned: number
+    percentage_score: number
+    passed: boolean
+    completion_time_minutes?: number
+  }>
+  error?: string
+}
+
 /**
  * Automatically calculates and saves exam score when student completes exam
  */
 export async function calculateAndSaveScore(attemptId: string): Promise<ScoringResult> {
   try {
+    // First, let's check if there are any student answers for this attempt
+    const { data: answersCheck, error: answersError } = await supabase
+      .from('student_answers')
+      .select('*')
+      .eq('attempt_id', attemptId)
+    
+    console.log('Student answers for attempt:', attemptId, answersCheck)
+    
+    if (answersError) {
+      console.error('Error checking student answers:', answersError)
+    }
+
+    // Now call the scoring function
     const { data, error } = await supabase.rpc('calculate_exam_score', {
       p_attempt_id: attemptId
     })
+
+    console.log('Database scoring result:', { data, error })
 
     if (error) throw error
 
@@ -66,9 +161,12 @@ export async function calculateAndSaveScore(attemptId: string): Promise<ScoringR
     }
   } catch (error) {
     console.error('Error calculating score:', error)
+    console.error('Error details:', JSON.stringify(error, null, 2))
+    console.error('Error type:', typeof error)
+    console.error('Error constructor:', error?.constructor?.name)
     return {
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: error instanceof Error ? error.message : (typeof error === 'string' ? error : 'Unknown error'),
       totalQuestions: 0,
       correctAnswers: 0,
       totalPoints: 0,
@@ -91,9 +189,12 @@ export async function validateAndMarkAnswers(
   }>
 ): Promise<{ success: boolean; validatedCount: number; error?: string }> {
   try {
+    console.log('Starting validation for attempt:', attemptId, 'with answers:', answers)
     let validatedCount = 0
 
     for (const answer of answers) {
+      console.log('Processing answer for question:', answer.questionId, 'answer:', answer.answer)
+      
       // Get question details
       const { data: question, error: questionError } = await supabase
         .from('questions')
@@ -101,14 +202,23 @@ export async function validateAndMarkAnswers(
         .eq('id', answer.questionId)
         .single()
 
+      console.log('Question data:', question, 'Error:', questionError)
+
       if (questionError) {
-        console.error('Error fetching question:', questionError)
+        console.error('Error fetching question:', answer.questionId, questionError)
+        continue
+      }
+
+      if (!question) {
+        console.error('Question not found:', answer.questionId)
         continue
       }
 
       // Determine if answer is correct
       let isCorrect = false
       let pointsEarned = 0
+
+      console.log('Question type:', question.question_type, 'Correct answer:', question.correct_answer, 'Student answer:', answer.answer)
 
       if (question.question_type === 'multiple_choice') {
         isCorrect = answer.answer.toUpperCase() === question.correct_answer.toUpperCase()
@@ -122,26 +232,41 @@ export async function validateAndMarkAnswers(
       }
 
       if (isCorrect) {
-        pointsEarned = question.points
+        pointsEarned = question.points || 1
       }
 
+      console.log('Answer validation result:', {
+        questionId: answer.questionId,
+        studentAnswer: answer.answer,
+        correctAnswer: question.correct_answer,
+        isCorrect,
+        pointsEarned
+      })
+
       // Insert or update student answer
+      const answerData = {
+        attempt_id: attemptId,
+        question_id: answer.questionId,
+        answer: answer.answer,
+        is_correct: isCorrect,
+        points_earned: pointsEarned,
+        answered_at: new Date().toISOString()
+      }
+
+      console.log('Saving answer data:', answerData)
+
       const { error: answerError } = await supabase
         .from('student_answers')
-        .upsert({
-          attempt_id: attemptId,
-          question_id: answer.questionId,
-          answer: answer.answer,
-          is_correct: isCorrect,
-          points_earned: pointsEarned,
-          answered_at: new Date().toISOString()
+        .upsert(answerData, {
+          onConflict: 'attempt_id,question_id'
         })
 
       if (answerError) {
-        console.error('Error saving answer:', answerError)
+        console.error('Error saving answer for question', answer.questionId, ':', answerError)
         continue
       }
 
+      console.log('Successfully saved answer for question:', answer.questionId)
       validatedCount++
     }
 
@@ -351,6 +476,48 @@ export async function processExamSubmission(
       percentageScore: 0,
       passed: false
     }
+  }
+}
+
+/**
+ * Gets detailed exam results for a specific student attempt
+ */
+export async function getDetailedStudentResults(attemptId: string): Promise<DetailedStudentResult | null> {
+  try {
+    const { data, error } = await supabase.rpc('get_detailed_student_results', {
+      p_attempt_id: attemptId
+    })
+
+    if (error) {
+      console.error('Error fetching detailed student results:', error)
+      return null
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error calling detailed student results function:', error)
+    return null
+  }
+}
+
+/**
+ * Gets detailed results for all students in a session
+ */
+export async function getSessionDetailedResults(sessionId: string): Promise<SessionDetailedResults | null> {
+  try {
+    const { data, error } = await supabase.rpc('get_session_detailed_results', {
+      p_session_id: sessionId
+    })
+
+    if (error) {
+      console.error('Error fetching session detailed results:', error)
+      return null
+    }
+
+    return data
+  } catch (error) {
+    console.error('Error calling session detailed results function:', error)
+    return null
   }
 }
 

@@ -156,6 +156,9 @@ export class TeacherWebRTC {
   private sessionId: string
   private teacherId: string
   private channel: any
+  
+  // Callback for when student stream is received
+  onStudentStreamReceived?: (studentId: string, stream: MediaStream) => void
 
   constructor(sessionId: string, teacherId: string) {
     this.sessionId = sessionId
@@ -259,9 +262,6 @@ export class TeacherWebRTC {
   getStudentStream(studentId: string): MediaStream | null {
     return this.remoteStreams.get(studentId) || null
   }
-
-  // Callback for when a new student stream is received
-  onStudentStreamReceived?: (studentId: string, stream: MediaStream) => void
 
   destroy() {
     if (this.channel) {

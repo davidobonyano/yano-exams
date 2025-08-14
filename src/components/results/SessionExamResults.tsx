@@ -6,6 +6,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useSession } from '@/context/SimpleSessionContext'
 import { supabase } from '@/lib/supabase'
 import { Exam, Question, StudentExamAttempt, StudentAnswer, ExamResult } from '@/types/database-v2'
+import { getDetailedStudentResults, DetailedStudentResult, DetailedAnswer } from '@/lib/auto-scoring'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -32,6 +33,7 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
   const [attempt, setAttempt] = useState<StudentExamAttempt | null>(null)
   const [result, setResult] = useState<ExamResult | null>(null)
   const [questions, setQuestions] = useState<QuestionWithAnswer[]>([])
+  const [detailedResult, setDetailedResult] = useState<DetailedStudentResult | null>(null)
   const [studentInfo, setStudentInfo] = useState<any>(null)
   const [sessionInfo, setSessionInfo] = useState<any>(null)
   const [loading, setLoading] = useState(true)
@@ -87,77 +89,88 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
     try {
       setLoading(true)
 
-      // Fetch attempt
-      const { data: attemptData, error: attemptError } = await supabase
-        .from('student_exam_attempts')
-        .select('*')
-        .eq('id', attemptId)
-        .single()
-
-      if (attemptError) throw attemptError
-
-      setAttempt(attemptData)
-
-      // Fetch exam
-      const { data: examData, error: examError } = await supabase
-        .from('exams')
-        .select('*')
-        .eq('id', attemptData.exam_id)
-        .single()
-
-      if (examError) throw examError
-      setExam(examData)
-
-      // Fetch student information
-      const { data: studentData, error: studentError } = await supabase
-        .from('students')
-        .select('*')
-        .eq('id', attemptData.student_id)
-        .single()
-
-      if (studentError) {
-        console.error('Error fetching student:', studentError)
-      } else {
-        setStudentInfo(studentData)
+      // Load detailed results using new SQL function
+      const detailedResults = await getDetailedStudentResults(attemptId)
+      
+      if (!detailedResults || !detailedResults.success) {
+        throw new Error(detailedResults?.error || 'Failed to load detailed results')
       }
 
-      // Fetch session information
-      const { data: sessionData, error: sessionError } = await supabase
-        .from('exam_sessions')
-        .select('*')
-        .eq('id', attemptData.session_id)
-        .single()
+      setDetailedResult(detailedResults)
 
-      if (sessionError) {
-        console.error('Error fetching session:', sessionError)
-      } else {
-        setSessionInfo(sessionData)
-      }
+      // Set basic info from detailed results
+      const attemptInfo = detailedResults.attempt_info
+      setAttempt({
+        id: attemptInfo.attempt_id,
+        student_id: attemptInfo.student_id,
+        exam_id: attemptInfo.exam_id,
+        session_id: attemptInfo.session_id,
+        status: attemptInfo.status,
+        started_at: attemptInfo.started_at,
+        completed_at: attemptInfo.completed_at,
+        submitted_at: attemptInfo.submitted_at
+      } as StudentExamAttempt)
 
-      // Check if results already exist and if student is allowed to see them
-      const { data: existingResult, error: resultError } = await supabase
-        .from('exam_results')
-        .select('*, exam_sessions!inner(allow_student_results_view)')
-        .eq('attempt_id', attemptId)
-        .single()
+      // Set exam, student, and session info from detailed results
+      setExam({
+        id: attemptInfo.exam_id,
+        title: attemptInfo.exam_title,
+        total_questions: attemptInfo.total_questions,
+        passing_score: attemptInfo.passing_score
+      } as Exam)
 
-      if (resultError && resultError.code !== 'PGRST116') {
-        throw resultError
-      }
+      setStudentInfo({
+        id: attemptInfo.student_id,
+        name: attemptInfo.student_name,
+        email: attemptInfo.student_email
+      })
 
-      // Check if this is a student trying to access results
-      if (session && existingResult && !existingResult.results_visible_to_student) {
-        // Show blocked results page instead of error
-        setError('RESULTS_BLOCKED')
-        return
-      }
+      setSessionInfo({
+        id: attemptInfo.session_id,
+        session_name: attemptInfo.session_name
+      })
 
-      if (existingResult) {
-        setResult(existingResult)
-        await loadQuestionsWithAnswers(attemptData.exam_id, attemptId)
-      } else {
-        // Calculate and save results (but don't make them visible to students by default)
-        await calculateResults(attemptData, examData)
+      // Set result from detailed results
+      if (attemptInfo.total_questions > 0) {
+        setResult({
+          id: attemptInfo.attempt_id,
+          attempt_id: attemptInfo.attempt_id,
+          student_id: attemptInfo.student_id,
+          session_id: attemptInfo.session_id,
+          exam_id: attemptInfo.exam_id,
+          total_questions: attemptInfo.total_questions,
+          correct_answers: attemptInfo.correct_answers,
+          total_points: attemptInfo.total_points,
+          points_earned: attemptInfo.points_earned,
+          percentage_score: attemptInfo.percentage_score,
+          passed: attemptInfo.passed,
+          created_at: new Date().toISOString()
+        } as ExamResult)
+
+        // Convert detailed answers to questions format
+        const questionsWithAnswers: QuestionWithAnswer[] = detailedResults.detailed_answers.map(answer => ({
+          id: answer.question_id,
+          exam_id: attemptInfo.exam_id,
+          question_text: answer.question_text,
+          question_type: answer.question_type as any,
+          options: answer.options,
+          correct_answer: answer.correct_answer_key,
+          points: answer.question_points,
+          explanation: answer.explanation,
+          created_at: new Date().toISOString(),
+          userAnswer: {
+            id: '',
+            attempt_id: attemptInfo.attempt_id,
+            question_id: answer.question_id,
+            answer: answer.student_answer_key,
+            is_correct: answer.is_correct,
+            points_earned: answer.points_earned,
+            answered_at: answer.answered_at || new Date().toISOString()
+          },
+          isCorrect: answer.is_correct
+        }))
+
+        setQuestions(questionsWithAnswers)
       }
 
     } catch (err: any) {
@@ -748,19 +761,23 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
                             <p className="text-sm text-muted-foreground mb-2">{question.question_text}</p>
                             
                             <div className="space-y-1 text-xs">
+                            {detailedResult && (
+                            <>
                               <div className="flex items-start space-x-2">
-                                <span className="font-medium min-w-fit">Your Answer:</span>
+                              <span className="font-medium min-w-fit">Your Answer:</span>
                                 <span className={question.isCorrect ? 'text-green-600' : 'text-red-600'}>
-                                  {question.userAnswer?.answer || 'Not answered'}
-                                </span>
-                              </div>
-                              
-                              {!question.isCorrect && (
-                                <div className="flex items-start space-x-2">
-                                  <span className="font-medium min-w-fit">Correct:</span>
-                                  <span className="text-green-600">{question.correct_answer}</span>
+                                    {detailedResult.detailed_answers[index]?.student_answer_text || 'Not answered'}
+                                  </span>
                                 </div>
-                              )}
+                              
+                            {!question.isCorrect && (
+                              <div className="flex items-start space-x-2">
+                                  <span className="font-medium min-w-fit">Correct:</span>
+                                    <span className="text-green-600">{detailedResult.detailed_answers[index]?.correct_answer_text}</span>
+                                     </div>
+                                   )}
+                                 </>
+                               )}
                               
                               {question.explanation && (
                                 <div className="flex items-start space-x-2">

@@ -123,8 +123,8 @@ export default function SessionDashboard() {
   const canTake = canTakeExam()
 
   // Check if session is still active
-  const sessionEnded = new Date(session.session.ends_at) < new Date()
-  const sessionActive = session.session.status === 'active' && !sessionEnded
+  const sessionEnded = (session.session as any).ends_at ? new Date((session.session as any).ends_at) < new Date() : false
+  const sessionActive = (session.session as any).status === 'active' && !sessionEnded
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -175,7 +175,7 @@ export default function SessionDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
               <span className="font-medium text-gray-700">Session:</span>
-              <span className="ml-2 text-gray-600">{session.session.session_name}</span>
+              <span className="ml-2 text-gray-600">{(session.session as any).session_name}</span>
             </div>
             <div>
               <span className="font-medium text-gray-700">Student ID:</span>
@@ -184,13 +184,13 @@ export default function SessionDashboard() {
             <div>
               <span className="font-medium text-gray-700">Starts:</span>
               <span className="ml-2 text-gray-600">
-                {new Date(session.session.starts_at).toLocaleString()}
+                {(session.session as any).starts_at ? new Date((session.session as any).starts_at).toLocaleString() : 'N/A'}
               </span>
             </div>
             <div>
               <span className="font-medium text-gray-700">Ends:</span>
               <span className="ml-2 text-gray-600">
-                {new Date(session.session.ends_at).toLocaleString()}
+                {(session.session as any).ends_at ? new Date((session.session as any).ends_at).toLocaleString() : 'N/A'}
               </span>
             </div>
           </div>

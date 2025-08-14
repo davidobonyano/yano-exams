@@ -89,7 +89,7 @@ export default function CreateExamModal({ onClose, onCreated }: CreateExamModalP
         />
 
         {/* Modal Container */}
-        <div className="flex items-center justify-center min-h-screen p-4 relative z-10">
+        <div className="flex items-center justify-center min-h-screen  p-4 relative z-10">
           <motion.div
             initial={{ opacity: 0, scale: 0.95, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
@@ -103,34 +103,24 @@ export default function CreateExamModal({ onClose, onCreated }: CreateExamModalP
               
               {/* Header */}
               <CardHeader className="relative">
-                <motion.button
-                  whileHover={{ scale: 1.1, rotate: 90 }}
-                  whileTap={{ scale: 0.9 }}
+                {/* Close Button - Top Right */}
+                <button
                   onClick={onClose}
-                  className="absolute right-4 top-4 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                  className="absolute right-4 top-4 z-10 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
                 >
                   <X className="w-5 h-5" />
-                </motion.button>
+                </button>
                 
-                <motion.div
-                  initial={{ opacity: 0, y: -20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                  className="flex items-center space-x-4"
-                >
-                  <motion.div
-                    initial={{ scale: 0, rotate: -180 }}
-                    animate={{ scale: 1, rotate: 0 }}
-                    transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
-                    className="w-12 h-12 bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 rounded-full flex items-center justify-center"
-                  >
+                {/* Title Section */}
+                <div className="flex items-center space-x-4 pr-16">
+                  <div className="w-12 h-12 bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 rounded-full flex items-center justify-center">
                     <BookOpen className="w-6 h-6 text-white" />
-                  </motion.div>
+                  </div>
                   <div>
                     <CardTitle className="text-2xl font-bold">Create New Exam</CardTitle>
                     <p className="text-muted-foreground">Design your assessment with advanced settings</p>
                   </div>
-                </motion.div>
+                </div>
               </CardHeader>
 
               <CardContent className="p-8">
@@ -267,10 +257,10 @@ export default function CreateExamModal({ onClose, onCreated }: CreateExamModalP
                     transition={{ delay: 0.8 }}
                     className="flex flex-col sm:flex-row gap-4 pt-6"
                   >
-                    <MagneticButton
+                    <button
                       type="submit"
                       disabled={loading}
-                      className="flex-1 h-14 text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl disabled:opacity-60"
+                      className="flex-1 h-14 text-lg font-semibold bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-xl disabled:opacity-60 transition-all duration-200 hover:scale-105 flex items-center justify-center"
                     >
                       {loading ? (
                         <>
@@ -287,10 +277,9 @@ export default function CreateExamModal({ onClose, onCreated }: CreateExamModalP
                           Create Exam
                         </>
                       )}
-                    </MagneticButton>
+                    </button>
 
                     <MagneticButton
-                      type="button"
                       onClick={onClose}
                       variant="outline"
                       className="flex-1 h-14 text-lg font-semibold bg-white/80 backdrop-blur-sm border-2 border-gray-200 text-gray-700 hover:bg-white hover:border-gray-300 rounded-xl"

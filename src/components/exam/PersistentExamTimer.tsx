@@ -93,18 +93,7 @@ export default function PersistentExamTimer({
   }
 
   useEffect(() => {
-    const savedTimer = localStorage.getItem(`exam_timer_${attemptId}`)
-    if (savedTimer) {
-      try {
-        const parsed = JSON.parse(savedTimer)
-        const timeSinceLastUpdate = Math.floor((Date.now() - parsed.lastUpdate) / 1000)
-        const adjustedTime = Math.max(0, parsed.timeRemaining - timeSinceLastUpdate)
-        setTimeRemaining(adjustedTime)
-      } catch (error) {
-        console.error('Error parsing saved timer:', error)
-      }
-    }
-
+    // Don't use localStorage on refresh - let server be the source of truth
     syncTimeWithServer()
     syncIntervalRef.current = setInterval(syncTimeWithServer, 30000)
 

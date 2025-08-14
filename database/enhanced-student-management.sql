@@ -399,12 +399,14 @@ BEGIN
   END IF;
 
   -- Calculate scores
+  -- Use exam's total_questions instead of counting student answers
+  v_total_questions := v_exam.total_questions;
+  
   SELECT 
-    COUNT(*) as total_questions,
     COUNT(*) FILTER (WHERE sa.is_correct = true) as correct_answers,
     SUM(q.points) as total_points,
     SUM(CASE WHEN sa.is_correct = true THEN q.points ELSE 0 END) as points_earned
-  INTO v_total_questions, v_correct_answers, v_total_points, v_points_earned
+  INTO v_correct_answers, v_total_points, v_points_earned
   FROM public.student_answers sa
   JOIN public.questions q ON q.id = sa.question_id
   WHERE sa.attempt_id = p_attempt_id;

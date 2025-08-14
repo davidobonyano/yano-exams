@@ -156,7 +156,7 @@ export default function SendWarningModal({
       setUsePreset(true)
     } catch (error) {
       console.error('Error sending warning:', error)
-      toast.error(`Failed to send warning: ${error?.message || 'Unknown error'}`)
+      toast.error(`Failed to send warning: ${(error as any)?.message || 'Unknown error'}`)
     } finally {
       setSending(false)
     }
@@ -194,24 +194,19 @@ export default function SendWarningModal({
                 <div className="h-2 bg-gradient-to-r from-orange-500 to-red-500" />
                 
                 <CardHeader className="relative">
-                  <motion.button
-                    whileHover={{ scale: 1.1, rotate: 90 }}
-                    whileTap={{ scale: 0.9 }}
+                  {/* Close Button - Top Right */}
+                  <button
                     onClick={onClose}
-                    className="absolute right-4 top-4 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                    className="absolute right-4 top-4 z-10 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
                   >
                     <X className="w-5 h-5" />
-                  </motion.button>
+                  </button>
                   
-                  <div className="text-center">
-                    <motion.div
-                      initial={{ scale: 0, rotate: -180 }}
-                      animate={{ scale: 1, rotate: 0 }}
-                      transition={{ type: "spring", stiffness: 200, damping: 20, delay: 0.1 }}
-                      className="w-16 h-16 bg-gradient-to-r from-orange-500 to-red-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg"
-                    >
+                  {/* Title Section */}
+                  <div className="text-center pr-16">
+                    <div className="w-16 h-16 bg-gradient-to-r from-orange-500 to-red-500 rounded-full flex items-center justify-center mx-auto mb-4 shadow-lg">
                       <AlertTriangle className="w-8 h-8 text-white" />
-                    </motion.div>
+                    </div>
                     
                     <CardTitle className="text-xl font-bold">Send Warning</CardTitle>
                     <p className="text-sm text-gray-600 mt-1">

@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { ExamSession } from '@/types/database-v2'
+import { getDetailedStudentResults, DetailedStudentResult } from '@/lib/auto-scoring'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MagneticButton } from '@/components/ui/magnetic-button'
 import { 
@@ -29,17 +30,22 @@ interface StudentResult {
   student_id: string
   full_name: string
   score: number
+  total_questions: number
   percentage: number
   passed: boolean
   time_taken: number
   submitted_at: string
   cheating_detected: boolean
   cheating_incidents: number
+  attempt_id: string
 }
 
 export default function SessionResults({ session, onClose }: SessionResultsProps) {
   const [results, setResults] = useState<StudentResult[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
+  const [selectedStudentDetails, setSelectedStudentDetails] = useState<DetailedStudentResult | null>(null)
+  const [showStudentDetails, setShowStudentDetails] = useState(false)
   const [stats, setStats] = useState({
     totalStudents: 0,
     submitted: 0,
@@ -51,39 +57,100 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
 
   useEffect(() => {
     fetchSessionResults()
+    
+    // Set up auto-refresh every 10 seconds for real-time updates
+    const refreshInterval = setInterval(() => fetchSessionResults(true), 10000)
+    
+    return () => clearInterval(refreshInterval)
   }, [session.id])
 
-  const fetchSessionResults = async () => {
+  const fetchSessionResults = async (isRefresh = false) => {
     try {
-      setLoading(true)
+      if (isRefresh) {
+        setRefreshing(true)
+      } else {
+        setLoading(true)
+      }
 
-      // Fetch student results for this session
+      // Fetch exam results for this session with student and exam details
+      console.log('Fetching results for session:', session.id)
       const { data: resultsData, error: resultsError } = await supabase
-        .from('student_exam_results')
+        .from('exam_results')
         .select(`
           *,
-          teacher_students!inner(
+          students!inner(
+            id,
             student_id,
             full_name
+          ),
+          exams!inner(
+            total_questions
+          ),
+          student_exam_attempts!inner(
+            completed_at,
+            started_at,
+            id
           )
         `)
         .eq('session_id', session.id)
-        .order('percentage', { ascending: false })
+        .order('percentage_score', { ascending: false })
+      
+      console.log('Results query response:', { resultsData, resultsError })
 
       if (resultsError) throw resultsError
 
-      const formattedResults = resultsData?.map(result => ({
-        id: result.id,
-        student_id: result.teacher_students.student_id,
-        full_name: result.teacher_students.full_name,
-        score: result.points_earned,
-        percentage: result.percentage_score,
-        passed: result.passed,
-        time_taken: result.time_taken_minutes,
-        submitted_at: result.created_at,
-        cheating_detected: result.cheating_detected || false,
-        cheating_incidents: result.cheating_incidents || 0
-      })) || []
+      // Fetch cheating logs for all attempts in this session
+      const { data: cheatingData, error: cheatingError } = await supabase
+        .from('cheating_logs')
+        .select('attempt_id, student_id')
+        .eq('session_id', session.id)
+
+      if (cheatingError) {
+        console.error('Error fetching cheating logs:', cheatingError)
+      }
+
+      // Group cheating incidents by attempt_id
+      const cheatingMap = new Map()
+      cheatingData?.forEach(log => {
+        const count = cheatingMap.get(log.attempt_id) || 0
+        cheatingMap.set(log.attempt_id, count + 1)
+      })
+
+      const formattedResults = resultsData?.map((result, index) => {
+        // Debug logging
+        if (!result.id || !result.student_exam_attempts.id) {
+          console.warn('Result with missing ID:', {
+            resultId: result.id,
+            attemptId: result.student_exam_attempts.id,
+            studentName: result.students?.full_name,
+            index
+          })
+        }
+
+        // Calculate time taken in minutes
+        const timeTaken = result.student_exam_attempts.completed_at && result.student_exam_attempts.started_at
+          ? Math.round((new Date(result.student_exam_attempts.completed_at).getTime() - 
+                      new Date(result.student_exam_attempts.started_at).getTime()) / (1000 * 60))
+          : 0;
+
+        const attemptId = result.student_exam_attempts.id
+        const cheatingIncidents = cheatingMap.get(attemptId) || 0
+
+        return {
+          id: result.id || `fallback-${result.student_id || Math.random()}`,
+          student_id: result.students.student_id,
+          full_name: result.students.full_name,
+          score: result.correct_answers, // Show correct answers
+          total_questions: result.exams.total_questions, // Use exam's total questions (same for all students)
+          percentage: Math.round(result.percentage_score), // Round percentage for display
+          passed: result.passed,
+          time_taken: timeTaken,
+          submitted_at: result.created_at,
+          cheating_detected: cheatingIncidents > 0,
+          cheating_incidents: cheatingIncidents,
+          attempt_id: attemptId || `fallback-attempt-${Math.random()}`
+        }
+      }) || []
 
       setResults(formattedResults)
 
@@ -104,6 +171,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
       console.error('Error fetching session results:', error)
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
   }
 
@@ -129,6 +197,33 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
     a.download = `${session.session_name}_results.csv`
     a.click()
     window.URL.revokeObjectURL(url)
+  }
+
+  const viewStudentDetails = async (attemptId: string) => {
+    try {
+      console.log('Attempting to get details for attempt ID:', attemptId)
+      
+      // Test direct RPC call first
+      const { data: rpcData, error: rpcError } = await supabase.rpc('get_detailed_student_results', {
+        p_attempt_id: attemptId
+      })
+      
+      console.log('Direct RPC call result:', { rpcData, rpcError })
+      
+      if (rpcError) {
+        console.error('RPC Error:', rpcError)
+        return
+      }
+      
+      if (rpcData && rpcData.success) {
+        setSelectedStudentDetails(rpcData)
+        setShowStudentDetails(true)
+      } else {
+        console.error('RPC returned unsuccessful result:', rpcData)
+      }
+    } catch (error) {
+      console.error('Error loading student details:', error)
+    }
   }
 
   if (loading) {
@@ -182,26 +277,33 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
               <div className="h-2 bg-gradient-to-r from-emerald-500 via-blue-500 to-purple-500" />
               
               <CardHeader className="relative">
-                <motion.button
-                  whileHover={{ scale: 1.1, rotate: 90 }}
-                  whileTap={{ scale: 0.9 }}
+                {/* Close Button - Top Right */}
+                <button
                   onClick={onClose}
-                  className="absolute right-4 top-4 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                  className="absolute right-4 top-4 z-10 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
                 >
                   <X className="w-5 h-5" />
-                </motion.button>
+                </button>
                 
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-2xl font-bold flex items-center gap-3">
-                      <Award className="w-8 h-8 text-emerald-600" />
-                      Session Results
-                    </CardTitle>
-                    <p className="text-muted-foreground mt-1">
-                      {session.session_name} - {session.class_level}
-                    </p>
-                  </div>
-                  
+                {/* Title Section */}
+                <div className="pr-16 mb-4">
+                  <CardTitle className="text-2xl font-bold flex items-center gap-3">
+                    <Award className="w-8 h-8 text-emerald-600" />
+                    Session Results
+                    {refreshing && (
+                      <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+                    )}
+                  </CardTitle>
+                  <p className="text-muted-foreground mt-1">
+                    {session.session_name} - {session.class_level}
+                    {refreshing && (
+                      <span className="ml-2 text-xs text-blue-600">• Live updates</span>
+                    )}
+                  </p>
+                </div>
+                
+                {/* Export Button - Below Title */}
+                <div className="flex justify-end">
                   <MagneticButton
                     onClick={exportResults}
                     className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg"
@@ -278,19 +380,22 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                             Submitted
                           </th>
                           <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                            Security
+                          Security
                           </th>
-                        </tr>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                             Details
+                           </th>
+                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
                         {results.map((result, index) => (
-                          <motion.tr
-                            key={result.id}
-                            initial={{ opacity: 0, y: 20 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: index * 0.1 }}
-                            className="hover:bg-gray-50"
-                          >
+                        <motion.tr
+                        key={`result-${result.id || 'no-id'}-${result.attempt_id || 'no-attempt'}-${index}`}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="hover:bg-gray-50"
+                        >
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div>
                                 <div className="text-sm font-medium text-gray-900">
@@ -303,7 +408,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
                               <div className="text-sm text-gray-900 font-medium">
-                                {result.score}/{session.exam?.total_questions || 'N/A'}
+                                {result.score}/{result.total_questions}
                               </div>
                               <div className="text-sm text-gray-500">
                                 {result.percentage}%
@@ -338,19 +443,30 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                               {new Date(result.submitted_at).toLocaleString()}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              {result.cheating_detected ? (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                                  <AlertTriangle className="w-3 h-3 mr-1" />
-                                  {result.cheating_incidents} incident{result.cheating_incidents !== 1 ? 's' : ''}
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                                  <CheckCircle className="w-3 h-3 mr-1" />
-                                  Clean
-                                </span>
-                              )}
+                            {result.cheating_detected ? (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            {result.cheating_incidents} incident{result.cheating_incidents !== 1 ? 's' : ''}
+                            </span>
+                            ) : (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                            <CheckCircle className="w-3 h-3 mr-1" />
+                            Clean
+                            </span>
+                            )}
                             </td>
-                          </motion.tr>
+                              <td className="px-6 py-4 whitespace-nowrap text-center">
+                                <MagneticButton
+                                  onClick={() => viewStudentDetails(result.attempt_id)}
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 px-4 text-xs border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300"
+                                >
+                                  <Eye className="w-3 h-3 mr-1" />
+                                  View
+                                </MagneticButton>
+                             </td>
+                           </motion.tr>
                         ))}
                       </tbody>
                     </table>
@@ -371,6 +487,148 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
           </motion.div>
         </div>
       </motion.div>
+
+      {/* Student Details Modal */}
+      <AnimatePresence>
+        {showStudentDetails && selectedStudentDetails && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-[10000] flex items-center justify-center p-4"
+            onClick={() => setShowStudentDetails(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 border-b flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold">
+                    {selectedStudentDetails.attempt_info.student_name} - Detailed Results
+                  </h2>
+                  <p className="text-sm text-gray-500">
+                    {selectedStudentDetails.attempt_info.exam_title} • {selectedStudentDetails.attempt_info.session_name}
+                  </p>
+                </div>
+                <MagneticButton
+                  onClick={() => setShowStudentDetails(false)}
+                  variant="outline"
+                  size="sm"
+                >
+                  <X className="w-4 h-4" />
+                </MagneticButton>
+              </div>
+
+              <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
+                <div className="p-6 space-y-6">
+                  {/* Summary */}
+                  <div className="grid grid-cols-4 gap-4">
+                    <Card key="summary-score">
+                      <CardContent className="p-4 text-center">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {selectedStudentDetails.attempt_info.percentage_score.toFixed(1)}%
+                        </div>
+                        <div className="text-sm text-gray-500">Final Score</div>
+                      </CardContent>
+                    </Card>
+                    <Card key="summary-correct">
+                      <CardContent className="p-4 text-center">
+                        <div className="text-2xl font-bold text-green-600">
+                          {selectedStudentDetails.attempt_info.correct_answers}
+                        </div>
+                        <div className="text-sm text-gray-500">Correct</div>
+                      </CardContent>
+                    </Card>
+                    <Card key="summary-incorrect">
+                      <CardContent className="p-4 text-center">
+                        <div className="text-2xl font-bold text-orange-600">
+                          {selectedStudentDetails.attempt_info.total_questions - selectedStudentDetails.attempt_info.correct_answers}
+                        </div>
+                        <div className="text-sm text-gray-500">Incorrect</div>
+                      </CardContent>
+                    </Card>
+                    <Card key="summary-points">
+                      <CardContent className="p-4 text-center">
+                        <div className="text-2xl font-bold">
+                          {selectedStudentDetails.attempt_info.points_earned}/{selectedStudentDetails.attempt_info.total_points}
+                        </div>
+                        <div className="text-sm text-gray-500">Points</div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Questions */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Question-by-Question Breakdown</h3>
+                    {selectedStudentDetails.detailed_answers.map((answer, index) => (
+                      <Card key={`question-${answer.question_id}-${index}`} className="overflow-hidden">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <h4 className="font-medium">Question {answer.question_number}</h4>
+                            <div className="flex items-center space-x-2">
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                answer.is_correct 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {answer.is_correct ? (
+                                  <>
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                    Correct
+                                  </>
+                                ) : (
+                                  <>
+                                    <XCircle className="w-3 h-3 mr-1" />
+                                    Incorrect
+                                  </>
+                                )}
+                              </span>
+                              <span className="text-sm text-gray-500">
+                                {answer.points_earned}/{answer.question_points} pts
+                              </span>
+                            </div>
+                          </div>
+
+                          <p className="text-sm mb-4 p-3 bg-gray-50 rounded">
+                            {answer.question_text}
+                          </p>
+
+                          <div className="space-y-2 text-sm">
+                            <div className="flex items-start space-x-2">
+                              <span className="font-medium min-w-fit">Student Answer:</span>
+                              <span className={answer.is_correct ? 'text-green-600' : 'text-red-600'}>
+                                {answer.student_answer_text}
+                              </span>
+                            </div>
+
+                            {!answer.is_correct && (
+                              <div className="flex items-start space-x-2">
+                                <span className="font-medium min-w-fit">Correct Answer:</span>
+                                <span className="text-green-600">{answer.correct_answer_text}</span>
+                              </div>
+                            )}
+
+                            {answer.explanation && (
+                              <div className="flex items-start space-x-2">
+                                <span className="font-medium min-w-fit">Explanation:</span>
+                                <span className="text-gray-600">{answer.explanation}</span>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </AnimatePresence>
   )
 }

@@ -7,7 +7,7 @@ import { Exam } from '@/types/database-v2'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { FloatingInput } from '@/components/ui/floating-input'
 import { MagneticButton } from '@/components/ui/magnetic-button'
-import { X, Calendar, Clock, Users, FileText, CheckCircle, Settings, Loader2, AlertTriangle } from 'lucide-react'
+import { X, Calendar, Clock, Users, FileText, CheckCircle, Settings, Loader2, AlertTriangle, Award } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface CreateSessionModalProps {
@@ -24,6 +24,7 @@ export default function CreateSessionModal({ exam, onClose, onCreated }: CreateS
   const [instructions, setInstructions] = useState('')
   const [allowLateJoin, setAllowLateJoin] = useState(false)
   const [enableCameraMonitoring, setEnableCameraMonitoring] = useState(false)
+  const [showResultsAfterSubmit, setShowResultsAfterSubmit] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [sessionCode, setSessionCode] = useState('')
@@ -67,7 +68,8 @@ export default function CreateSessionModal({ exam, onClose, onCreated }: CreateS
         p_ends_at: endDate.toISOString(),
         p_max_students: maxStudents,
         p_instructions: instructions.trim() || null,
-        p_camera_monitoring_enabled: enableCameraMonitoring
+        p_camera_monitoring_enabled: enableCameraMonitoring,
+        p_show_results_after_submit: showResultsAfterSubmit
       })
 
       if (error) throw error
@@ -176,6 +178,12 @@ export default function CreateSessionModal({ exam, onClose, onCreated }: CreateS
                         {enableCameraMonitoring ? 'Enabled' : 'Disabled'}
                       </span>
                     </div>
+                    <div className="flex justify-between items-center">
+                      <span className="font-medium">Show Results:</span>
+                      <span className={`text-sm px-2 py-1 rounded-full ${showResultsAfterSubmit ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                        {showResultsAfterSubmit ? 'Immediately' : 'Hidden'}
+                      </span>
+                    </div>
                   </motion.div>
 
                   <MagneticButton
@@ -220,45 +228,37 @@ export default function CreateSessionModal({ exam, onClose, onCreated }: CreateS
             transition={{ type: "spring", duration: 0.5 }}
             className="relative w-full max-w-2xl z-10"
           >
-            <Card className="border-0 shadow-2xl bg-white/95 backdrop-blur-md overflow-hidden">
+            <Card className="border-0 shadow-2xl bg-white/95 backdrop-blur-md overflow-hidden max-h-[90vh] flex flex-col">
               {/* Gradient Header */}
               <div className="h-2 bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500" />
               
               {/* Header */}
-              <CardHeader className="relative">
-                <motion.button
-                  whileHover={{ scale: 1.1, rotate: 90 }}
-                  whileTap={{ scale: 0.9 }}
+              <CardHeader className="relative flex-shrink-0">
+                {/* Close Button - Top Right */}
+                <button
                   onClick={onClose}
-                  className="absolute right-4 top-4 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
+                  className="absolute right-4 top-4 z-10 p-2 rounded-full bg-white/20 hover:bg-white/30 transition-colors"
                 >
                   <X className="w-5 h-5" />
-                </motion.button>
+                </button>
                 
-                <motion.div
-                  initial={{ opacity: 0, y: -20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                  className="flex items-center space-x-4"
-                >
-                  <motion.div
-                    initial={{ scale: 0, rotate: -180 }}
-                    animate={{ scale: 1, rotate: 0 }}
-                    transition={{ delay: 0.3, type: "spring", stiffness: 200 }}
-                    className="w-12 h-12 bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 rounded-full flex items-center justify-center"
-                  >
-                    <Settings className="w-6 h-6 text-white" />
-                  </motion.div>
-                  <div>
-                    <CardTitle className="text-2xl font-bold">Create Exam Session</CardTitle>
-                    <p className="text-muted-foreground">
-                      For: <strong>{exam.title}</strong> ({exam.class_level})
-                    </p>
+                {/* Title Section */}
+                <div className="pr-16">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-500 rounded-full flex items-center justify-center">
+                      <Settings className="w-6 h-6 text-white" />
+                    </div>
+                    <div>
+                      <CardTitle className="text-2xl font-bold">Create Exam Session</CardTitle>
+                      <p className="text-muted-foreground">
+                        For: <strong>{exam.title}</strong> ({exam.class_level})
+                      </p>
+                    </div>
                   </div>
-                </motion.div>
+                </div>
               </CardHeader>
 
-              <CardContent className="p-8">
+              <CardContent className="p-8 overflow-y-auto flex-1 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
                 <form onSubmit={handleSubmit} className="space-y-6">
                   {/* Session Name */}
                   <motion.div
@@ -389,6 +389,25 @@ export default function CreateSessionModal({ exam, onClose, onCreated }: CreateS
                         </p>
                       </div>
                     </div>
+
+                    <div className="flex items-center space-x-3 p-4 bg-white/80 backdrop-blur-sm rounded-xl border border-gray-200">
+                      <input
+                        id="showResultsAfterSubmit"
+                        type="checkbox"
+                        className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        checked={showResultsAfterSubmit}
+                        onChange={(e) => setShowResultsAfterSubmit(e.target.checked)}
+                      />
+                      <div className="flex-1">
+                        <label htmlFor="showResultsAfterSubmit" className="text-sm font-medium text-gray-700 flex items-center gap-2">
+                          <Award className="w-4 h-4" />
+                          Show results after submission
+                        </label>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Students will see their results immediately after submitting the exam
+                        </p>
+                      </div>
+                    </div>
                   </motion.div>
 
                   {/* Error Display */}
@@ -415,10 +434,10 @@ export default function CreateSessionModal({ exam, onClose, onCreated }: CreateS
                     transition={{ delay: 0.9 }}
                     className="flex flex-col sm:flex-row gap-4 pt-6"
                   >
-                    <MagneticButton
+                    <button
                       type="submit"
                       disabled={loading}
-                      className="flex-1 h-14 text-lg font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl disabled:opacity-60"
+                      className="flex-1 h-14 text-lg font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white rounded-xl disabled:opacity-60 transition-all duration-200 hover:scale-105 flex items-center justify-center"
                     >
                       {loading ? (
                         <>
@@ -435,10 +454,9 @@ export default function CreateSessionModal({ exam, onClose, onCreated }: CreateS
                           Create Session
                         </>
                       )}
-                    </MagneticButton>
+                    </button>
 
                     <MagneticButton
-                      type="button"
                       onClick={onClose}
                       variant="outline"
                       className="flex-1 h-14 text-lg font-semibold bg-white/80 backdrop-blur-sm border-2 border-gray-200 text-gray-700 hover:bg-white hover:border-gray-300 rounded-xl"

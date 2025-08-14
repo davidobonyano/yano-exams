@@ -52,13 +52,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const fetchProfile = async (userId: string) => {
     try {
       const { data, error } = await supabase
-        .from('users')
+        .from('teachers')
         .select('*')
         .eq('id', userId)
         .single()
 
       if (error) throw error
-      setProfile(data)
+      setProfile({ ...data, role: 'teacher' })
     } catch (error) {
       console.error('Error fetching profile:', error)
       setProfile(null)

@@ -10,17 +10,17 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
-import { AnimatedCard, GlassCard, FloatingCard } from '@/components/ui/animated-cards'
-import { CircularProgress, AnimatedCounter, ProgressBar } from '@/components/ui/progress-rings'
-import { MagneticButton } from '@/components/ui/magnetic-button'
+
+import { calculateAndSaveScore, validateAndMarkAnswers } from '@/lib/auto-scoring'
 import { AnimatedBackground } from '@/components/ui/animated-background'
 import { VideoStream } from '@/components/ui/video-stream'
-import { Clock, AlertTriangle, Wifi, WifiOff, BookOpen, CheckCircle, Circle, ArrowLeft, ArrowRight, Send, Eye, EyeOff, Timer, Target, Zap } from 'lucide-react'
+import { Clock, AlertTriangle, Wifi, WifiOff, BookOpen, CheckCircle, Circle, ArrowLeft, ArrowRight, Send, Eye, EyeOff, Timer, Target, Zap, Camera } from 'lucide-react'
 import { useCheatingDetection } from '@/hooks/useCheatingDetection'
 import PersistentExamTimer from './PersistentExamTimer'
 import SessionQuestionDisplay from './SessionQuestionDisplay'
 import ExamInstructions from './ExamInstructions'
 import CameraAccess from './CameraAccess'
+import CameraPreview from './CameraPreview'
 import SubmitConfirmationModal from './SubmitConfirmationModal'
 import StudentWarningDisplay from './StudentWarningDisplay'
 import { StudentWebRTC } from '@/lib/webrtc'
@@ -73,6 +73,24 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
   // Camera access handlers
   const handleCameraGranted = async (stream: MediaStream) => {
+    console.log('🎥 Camera granted, setting up...')
+    console.log('🔍 STREAM DEBUG:', {
+      id: stream.id,
+      active: stream.active,
+      videoTracks: stream.getVideoTracks().length,
+      audioTracks: stream.getAudioTracks().length
+    })
+    
+    // Check each video track
+    stream.getVideoTracks().forEach((track, index) => {
+      console.log(`📹 Video track ${index}:`, {
+        enabled: track.enabled,
+        readyState: track.readyState,
+        settings: track.getSettings(),
+        constraints: track.getConstraints()
+      })
+    })
+    
     setCameraStream(stream)
     setShowCameraAccess(false)
     cameraPromptShown.current = false
@@ -94,21 +112,40 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
           console.log('Camera granted, will update attempt status when exam starts')
         }
 
-        // Start WebRTC streaming if camera monitoring is enabled
+        // Start WebRTC streaming for teacher dashboard (now that camera is stable)
         if (session.session.camera_monitoring_enabled) {
-          try {
-            const webrtc = new StudentWebRTC(
-              session.session.id,
-              session.student.id,
-              session.session.teacher_id
-            )
-            await webrtc.startStreaming(stream)
-            setWebrtcConnection(webrtc)
-            toast.success('Camera streaming ready')
-          } catch (webrtcError) {
-            console.error('WebRTC error:', webrtcError)
-            toast.error('Camera enabled, but live streaming unavailable (check database setup)')
-          }
+          console.log('Camera monitoring enabled - starting WebRTC streaming')
+          
+          // Wait a bit to ensure camera stream is fully established
+          setTimeout(async () => {
+            try {
+              console.log('Starting WebRTC streaming with stable camera')
+              const webrtc = new StudentWebRTC(
+                session.session.id,
+                session.student.id,
+                session.session.teacher_id
+              )
+              
+              // Create a fresh clone with proper track handling
+              const streamClone = new MediaStream()
+              stream.getVideoTracks().forEach(track => {
+                const clonedTrack = track.clone()
+                streamClone.addTrack(clonedTrack)
+                console.log('🔄 Cloned video track for WebRTC:', clonedTrack.id)
+              })
+              
+              console.log('🚀 Starting WebRTC with cloned stream')
+              await webrtc.startStreaming(streamClone)
+              setWebrtcConnection(webrtc)
+              
+              console.log('WebRTC streaming started successfully')
+              toast.success('Live video streaming to teacher active')
+            } catch (webrtcError) {
+              console.error('WebRTC streaming error:', webrtcError)
+              toast.error('Camera monitoring active, but live streaming unavailable')
+              // Continue with basic monitoring even if WebRTC fails
+            }
+          }, 1000) // 1 second delay to ensure camera is stable
         }
       } catch (error) {
         console.error('Error updating camera status:', error)
@@ -116,9 +153,13 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       }
     }
     
-    if (session) {
-      initializeExam()
-    }
+    // Force exam initialization after camera setup
+    console.log('Camera setup complete, initializing exam...')
+    setTimeout(() => {
+      if (session) {
+        initializeExam()
+      }
+    }, 100)
   }
 
   const handleCameraDeclined = () => {
@@ -143,29 +184,35 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     console.log('Session ID:', sessionId)
     console.log('Exam ID:', examId)
     console.log('Full session:', session)
+    console.log('PropExamId:', propExamId)
+    console.log('Session exam id:', session?.exam?.id)
+    console.log('Session session id:', session?.session?.id)
     
     if (!session || !sessionId || !examId) {
-      console.log('Missing session data, waiting...')
+      console.log('Missing session data details:')
+      console.log('- Session missing:', !session)
+      console.log('- SessionId missing:', !sessionId)
+      console.log('- ExamId missing:', !examId)
+      console.log('Waiting for complete session data...')
       return
     }
     
     console.log('Session validation passed, initializing exam...')
 
-    // Check if camera is required for this session
+    // Always initialize exam first, handle camera separately
+    console.log('About to call initializeExam')
+    initializeExam()
+    
+    // Handle camera after exam is initialized
     const cameraRequired = session.session.camera_monitoring_enabled === true
+    console.log('Camera required:', cameraRequired, 'Camera stream:', !!cameraStream, 'Prompt shown:', cameraPromptShown.current)
     
     if (cameraRequired && !cameraStream && !cameraPromptShown.current) {
+      console.log('Showing camera access prompt after exam initialization')
       setCameraAccessRequired(true)
       setShowCameraAccess(true)
       cameraPromptShown.current = true
-      return
     }
-    
-    if (cameraRequired && !cameraStream && cameraPromptShown.current) {
-      return
-    }
-
-    initializeExam()
   }, [session, sessionId, examId, cameraStream])
 
   // Enhanced cheating detection is now handled by the useCheatingDetection hook
@@ -194,14 +241,70 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     }
   }, [])
 
+  // Cleanup camera when user leaves page or closes tab
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      console.log('Page unloading - stopping camera')
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop())
+      }
+      if (webrtcConnection) {
+        try {
+          webrtcConnection.destroy()
+        } catch (error) {
+          console.log('Page unload WebRTC cleanup error:', error)
+        }
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [cameraStream, webrtcConnection])
+
+  // Cleanup camera and WebRTC on component unmount
+  useEffect(() => {
+    return () => {
+      console.log('Component unmounting - cleaning up camera and WebRTC')
+      
+      // Stop camera stream
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => {
+          track.stop()
+          console.log('Unmount: Stopped track:', track.kind)
+        })
+      }
+      
+      // Cleanup WebRTC connection
+      if (webrtcConnection) {
+        try {
+          webrtcConnection.destroy()
+          console.log('Unmount: Disconnected WebRTC')
+        } catch (error) {
+          console.log('Unmount: WebRTC cleanup error (non-critical):', error)
+        }
+      }
+    }
+  }, [cameraStream, webrtcConnection])
+
   // Cheating logging is now handled by the useCheatingDetection hook
 
   const initializeExam = async () => {
     console.log('=== INITIALIZE EXAM CALLED ===')
     console.log('Session in initializeExam:', session)
+    console.log('examId:', examId)
+    console.log('sessionId:', sessionId)
     
     if (!session) {
       console.log('No session in initializeExam, returning')
+      return
+    }
+
+    if (!examId) {
+      console.error('No examId available for initialization')
+      setError('Exam ID not found')
       return
     }
 
@@ -224,7 +327,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
       if (attemptData) {
         if (attemptData.status === 'submitted' || attemptData.status === 'completed') {
-          router.push(`/results/${attemptData.id}`)
+          // Exam is already completed, let StudentPortal handle showing completed state
           return
         }
         setAttempt(attemptData)
@@ -233,19 +336,26 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       }
 
       // Fetch questions
+      console.log('Fetching questions for exam ID:', examId)
       const { data: questionsData, error: questionsError } = await supabase
         .from('questions')
         .select('*')
         .eq('exam_id', examId)
         .order('created_at')
 
+      console.log('Questions query result:', { questionsData, questionsError })
+
       if (questionsError) {
+        console.error('Questions fetch error:', questionsError)
         throw questionsError
       }
 
       if (!questionsData || questionsData.length === 0) {
+        console.error('No questions found for exam ID:', examId)
         throw new Error('No questions found for this exam')
       }
+
+      console.log(`Loaded ${questionsData.length} questions for exam`)
 
       // Randomize question order for anti-cheating
       const shuffledQuestions = [...questionsData].sort(() => Math.random() - 0.5)
@@ -312,8 +422,14 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
       console.log('Start exam result:', data)
       console.log('Start exam error:', error)
-
-      if (error) throw error
+      
+      if (error) {
+        console.error('Detailed error:', JSON.stringify(error, null, 2))
+        console.error('Error code:', error.code)
+        console.error('Error message:', error.message)
+        console.error('Error details:', error.details)
+        throw error
+      }
 
       setAttempt(data)
       setExamStarted(true)
@@ -321,6 +437,9 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       console.log('Exam started successfully')
     } catch (err: any) {
       console.error('Error starting exam:', err)
+      console.error('Error type:', typeof err)
+      console.error('Error details:', JSON.stringify(err, null, 2))
+      console.error('Error constructor:', err?.constructor?.name)
       setError(err.message || 'Failed to start exam')
     }
   }
@@ -370,6 +489,36 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     if (!attempt || !session) return
 
     try {
+      console.log('Exam submission started - cleaning up camera...')
+      
+      // Stop camera stream and cleanup WebRTC connection
+      if (cameraStream) {
+        console.log('Stopping camera stream tracks')
+        cameraStream.getTracks().forEach(track => {
+          track.stop()
+          console.log('Stopped track:', track.kind)
+        })
+        setCameraStream(null)
+      }
+      
+      // Cleanup WebRTC connection
+      if (webrtcConnection) {
+        console.log('Cleaning up WebRTC connection')
+        try {
+          webrtcConnection.destroy()
+        } catch (webrtcError) {
+          console.log('WebRTC cleanup error (non-critical):', webrtcError)
+        }
+        setWebrtcConnection(null)
+      }
+      
+      // Update camera status in database
+      console.log('Updating camera status to disabled in database')
+      await supabase
+        .from('student_exam_attempts')
+        .update({ camera_enabled: false })
+        .eq('id', attempt.id)
+
       // Update attempt status
       const { error: updateError } = await supabase
         .from('student_exam_attempts')
@@ -382,8 +531,40 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
       if (updateError) throw updateError
 
-      // Redirect to dashboard instead of results (results are now teacher-controlled)
-      router.push('/dashboard?examSubmitted=true')
+      // First validate and mark all answers as correct/incorrect
+      const answersArray = Object.entries(answers).map(([questionId, answer]) => ({
+        questionId,
+        answer
+      }))
+      
+      console.log('Validating answers for attempt:', attempt.id, answersArray)
+      
+      const validationResult = await validateAndMarkAnswers(attempt.id, answersArray)
+      
+      console.log('Answer validation result:', validationResult)
+
+      // Then calculate and save the exam score
+      console.log('Calculating exam score for attempt:', attempt.id)
+      const scoringResult = await calculateAndSaveScore(attempt.id)
+      
+      if (scoringResult.success) {
+        console.log('Exam score calculated successfully:', scoringResult)
+      } else {
+        console.error('Failed to calculate exam score:', scoringResult.error)
+      }
+
+      // Check if session allows showing results after submission
+      const showResults = session?.session?.show_results_after_submit || false
+      console.log('Show results after submit:', showResults)
+      console.log('Session data:', session)
+      
+      if (showResults) {
+        // Redirect to results page if enabled
+        router.push(`/results/${attempt.id}`)
+      } else {
+        // Redirect to dashboard with success message if disabled
+        router.push('/dashboard?examSubmitted=true')
+      }
     } catch (err: any) {
       console.error('Error submitting exam:', err)
       setError(err.message || 'Failed to submit exam')
@@ -502,7 +683,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         studentName={session.student.full_name}
         examTitle={session.exam.title} 
         durationMinutes={session.exam.duration_minutes}
-        instructions={session.exam.instructions}
+        instructions={(session.exam as any).instructions || 'Please read all questions carefully and answer to the best of your ability.'}
         onContinueToExam={() => {
           setShowInstructions(false)
           setExamStarted(true)
@@ -532,6 +713,20 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
           
           {/* Debug button to reinitialize */}
           <div className="mt-4">
+            <button
+              onClick={() => {
+                console.log('Force initialization clicked')
+                console.log('Current examId:', examId)
+                console.log('Current sessionId:', sessionId)
+                console.log('Current session:', session)
+                if (session) {
+                  initializeExam()
+                }
+              }}
+              className="bg-blue-600 text-white px-4 py-2 rounded mb-2 mr-2"
+            >
+              Force Initialize
+            </button>
             <button
               onClick={() => {
                 console.log('=== MANUAL REINITIALIZE ===')
@@ -665,19 +860,12 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         animate={{ opacity: 1, y: 0 }}
         className="sticky top-0 z-40 p-4"
       >
-        <GlassCard className="mx-auto max-w-7xl p-4">
+        <Card className="mx-auto max-w-7xl p-4 bg-white/80 backdrop-blur">
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-4">
-              <FloatingCard delay={0} amplitude={5}>
-                <motion.div
-                  initial={{ scale: 0, rotate: -180 }}
-                  animate={{ scale: 1, rotate: 0 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 20 }}
-                  className="w-12 h-12 bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 rounded-full flex items-center justify-center shadow-lg"
-                >
-                  <Target className="w-6 h-6 text-white" />
-                </motion.div>
-              </FloatingCard>
+              <div className="w-12 h-12 bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 rounded-full flex items-center justify-center shadow-lg">
+                <Target className="w-6 h-6 text-white" />
+              </div>
               
               <div>
                 <h1 className="text-xl font-bold text-foreground">{session.exam.title}</h1>
@@ -705,45 +893,46 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
               </div>
             </div>
 
-            {/* Timer with Progress Ring */}
+            {/* Timer and Camera Status */}
             <div className="flex items-center space-x-4">
-              <CircularProgress
-                progress={100 - timeProgress}
-                size={80}
-                strokeWidth={6}
-                color="#ef4444"
-                backgroundColor="#fef2f2"
-              >
-                <div className="text-center">
-                  <Timer className="w-4 h-4 mx-auto text-red-500 mb-1" />
-                  <PersistentExamTimer
-                    attemptId={attempt.id}
-                    initialTimeRemaining={attempt.time_remaining || session.exam.duration_minutes * 60}
-                    onTimeUp={handleTimeUp}
-                  />
+              {/* Camera Indicator */}
+              {cameraStream && (
+                <div className="text-center p-4 border rounded-lg bg-green-50">
+                  <Camera className="w-4 h-4 mx-auto text-green-500 mb-1" />
+                  <div className="flex items-center justify-center space-x-1">
+                    <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                    <span className="text-xs font-medium text-green-700">Camera On</span>
+                  </div>
                 </div>
-              </CircularProgress>
+              )}
+              
+              <div className="text-center p-4 border rounded-lg bg-red-50">
+                <Timer className="w-4 h-4 mx-auto text-red-500 mb-1" />
+                <PersistentExamTimer
+                  attemptId={attempt.id}
+                  initialTimeRemaining={attempt.time_remaining || session.exam.duration_minutes * 60}
+                  onTimeUp={handleTimeUp}
+                />
+              </div>
             </div>
           </div>
 
-          {/* Enhanced Progress Bar */}
+          {/* Progress Bar */}
           <div className="mt-4 space-y-2">
             <div className="flex justify-between text-sm text-muted-foreground">
               <span>
-                <AnimatedCounter value={Object.keys(answers).length} /> of {questions.length} answered
+                {Object.keys(answers).length} of {questions.length} answered
               </span>
               <span>
-                <AnimatedCounter value={Math.round(progressPercentage)} suffix="%" />% complete
+                {Math.round(progressPercentage)}% complete
               </span>
             </div>
-            <ProgressBar 
-              progress={progressPercentage} 
-              height={6}
-              color="linear-gradient(90deg, #3b82f6, #8b5cf6, #06b6d4)"
-              className="rounded-full"
+            <Progress 
+              value={progressPercentage} 
+              className="h-2"
             />
           </div>
-        </GlassCard>
+        </Card>
       </motion.div>
 
       {/* Main Content */}
@@ -759,15 +948,10 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                 exit={{ opacity: 0, x: -50, scale: 0.95 }}
                 transition={{ duration: 0.4, ease: "easeInOut" }}
               >
-                <AnimatedCard 
-                  className="h-full"
-                  hoverScale={1.01}
-                  glowColor="rgba(59, 130, 246, 0.2)"
-                >
-                  <GlassCard className="h-full">
-                    <div className="h-2 bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 rounded-t-2xl" />
-                    
-                    <div className="p-8">
+                <Card className="h-full bg-white/80 backdrop-blur">
+                  <div className="h-2 bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 rounded-t-2xl" />
+                  
+                  <div className="p-8">
                       {/* Question Header */}
                       <motion.div
                         initial={{ opacity: 0, y: 20 }}
@@ -814,7 +998,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                         transition={{ delay: 0.4 }}
                         className="mt-8 flex justify-between items-center"
                       >
-                        <MagneticButton
+                        <Button
                           onClick={() => {
                             const newIndex = Math.max(0, currentQuestionIndex - 1)
                             setCurrentQuestionIndex(newIndex)
@@ -826,49 +1010,41 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                         >
                           <ArrowLeft className="w-4 h-4 mr-2" />
                           Previous
-                        </MagneticButton>
+                        </Button>
 
                         <div className="text-center space-y-2">
-                          <CircularProgress
-                            progress={((currentQuestionIndex + 1) / questions.length) * 100}
-                            size={60}
-                            strokeWidth={4}
-                            color="#3b82f6"
-                          >
+                          <div className="w-12 h-12 border-2 border-blue-500 rounded-full flex items-center justify-center bg-blue-50">
                             <span className="text-xs font-medium">
                               {currentQuestionIndex + 1}/{questions.length}
                             </span>
-                          </CircularProgress>
+                          </div>
                         </div>
 
                         {currentQuestionIndex === questions.length - 1 ? (
-                          <MagneticButton
+                          <Button
                             onClick={handleSubmitClick}
-                            variant="primary"
                             size="lg"
                             className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
                           >
                             <Send className="w-4 h-4 mr-2" />
                             Submit Exam
-                          </MagneticButton>
+                          </Button>
                         ) : (
-                          <MagneticButton
+                          <Button
                             onClick={() => {
                               const newIndex = Math.min(questions.length - 1, currentQuestionIndex + 1)
                               setCurrentQuestionIndex(newIndex)
                               setVisitedQuestions(prev => new Set(prev).add(newIndex))
                             }}
-                            variant="primary"
                             size="lg"
                           >
                             Next
                             <ArrowRight className="w-4 h-4 ml-2" />
-                          </MagneticButton>
+                          </Button>
                         )}
                       </motion.div>
                     </div>
-                  </GlassCard>
-                </AnimatedCard>
+                </Card>
               </motion.div>
             </AnimatePresence>
           </div>
@@ -882,8 +1058,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
               className="sticky top-32 space-y-6"
             >
               {/* Question Grid */}
-              <AnimatedCard hoverScale={1.02}>
-                <GlassCard>
+              <Card className="bg-white/80 backdrop-blur">
                   <div className="p-6">
                     <div className="mb-4">
                       <h3 className="font-bold mb-2 flex items-center space-x-2">
@@ -938,87 +1113,102 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                     {/* Progress Stats */}
                     <div className="space-y-4">
                       <div className="text-center">
-                        <CircularProgress
-                          progress={progressPercentage}
-                          size={100}
-                          strokeWidth={8}
-                          color="#3b82f6"
-                        >
+                        <div className="w-20 h-20 border-4 border-blue-500 rounded-full flex items-center justify-center bg-blue-50 mx-auto">
                           <div className="text-center">
-                            <div className="text-2xl font-bold text-blue-600">
-                              <AnimatedCounter value={Math.round(progressPercentage)} suffix="%" />
+                            <div className="text-lg font-bold text-blue-600">
+                              {Math.round(progressPercentage)}%
                             </div>
                             <div className="text-xs text-gray-500">Complete</div>
                           </div>
-                        </CircularProgress>
+                        </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-3">
-                        <FloatingCard delay={0.2} amplitude={3}>
-                          <div className="text-center p-3 bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl border border-green-200">
-                            <Zap className="w-5 h-5 text-green-600 mx-auto mb-1" />
-                            <div className="text-xl font-bold text-green-600">
-                              <AnimatedCounter value={Object.keys(answers).length} />
-                            </div>
-                            <div className="text-xs text-green-600">Answered</div>
+                        <div className="text-center p-3 bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl border border-green-200">
+                          <Zap className="w-5 h-5 text-green-600 mx-auto mb-1" />
+                          <div className="text-xl font-bold text-green-600">
+                            {Object.keys(answers).length}
                           </div>
-                        </FloatingCard>
+                          <div className="text-xs text-green-600">Answered</div>
+                        </div>
                         
-                        <FloatingCard delay={0.4} amplitude={3}>
-                          <div className="text-center p-3 bg-gradient-to-br from-orange-50 to-red-100 rounded-xl border border-orange-200">
-                            <Timer className="w-5 h-5 text-orange-600 mx-auto mb-1" />
-                            <div className="text-xl font-bold text-orange-600">
-                              <AnimatedCounter value={questions.length - Object.keys(answers).length} />
-                            </div>
-                            <div className="text-xs text-orange-600">Remaining</div>
+                        <div className="text-center p-3 bg-gradient-to-br from-orange-50 to-red-100 rounded-xl border border-orange-200">
+                          <Timer className="w-5 h-5 text-orange-600 mx-auto mb-1" />
+                          <div className="text-xl font-bold text-orange-600">
+                            {questions.length - Object.keys(answers).length}
                           </div>
-                        </FloatingCard>
+                          <div className="text-xs text-orange-600">Remaining</div>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </GlassCard>
-              </AnimatedCard>
+                </Card>
 
               {/* Quick Actions */}
-              <AnimatedCard hoverScale={1.02}>
-                <GlassCard>
+              <Card className="bg-white/80 backdrop-blur">
+                <div className="p-6">
+                  <h3 className="font-bold mb-4 flex items-center space-x-2">
+                    <Zap className="w-5 h-5 text-purple-500" />
+                    <span>Quick Actions</span>
+                  </h3>
+                  
+                  <div className="grid grid-cols-2 gap-3">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        const unanswered = questions.findIndex((q, i) => !answers[q.id] && i > currentQuestionIndex)
+                        if (unanswered !== -1) {
+                          setCurrentQuestionIndex(unanswered)
+                          setVisitedQuestions(prev => new Set(prev).add(unanswered))
+                        }
+                      }}
+                      className="text-xs"
+                    >
+                      Next Unanswered
+                    </Button>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setCurrentQuestionIndex(questions.length - 1)
+                        setVisitedQuestions(prev => new Set(prev).add(questions.length - 1))
+                      }}
+                      className="text-xs"
+                    >
+                      Go to Last
+                    </Button>
+                  </div>
+                </div>
+              </Card>
+
+              {/* Camera Preview Card */}
+              {cameraStream && (
+                <Card className="bg-white/80 backdrop-blur">
                   <div className="p-6">
                     <h3 className="font-bold mb-4 flex items-center space-x-2">
-                      <Zap className="w-5 h-5 text-purple-500" />
-                      <span>Quick Actions</span>
+                      <Camera className="w-5 h-5 text-green-500" />
+                      <span>Camera Preview</span>
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                     </h3>
                     
-                    <div className="grid grid-cols-2 gap-3">
-                      <MagneticButton
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          const unanswered = questions.findIndex((q, i) => !answers[q.id] && i > currentQuestionIndex)
-                          if (unanswered !== -1) {
-                            setCurrentQuestionIndex(unanswered)
-                            setVisitedQuestions(prev => new Set(prev).add(unanswered))
-                          }
-                        }}
-                        className="text-xs"
-                      >
-                        Next Unanswered
-                      </MagneticButton>
-                      
-                      <MagneticButton
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                          setCurrentQuestionIndex(questions.length - 1)
-                          setVisitedQuestions(prev => new Set(prev).add(questions.length - 1))
-                        }}
-                        className="text-xs"
-                      >
-                        Go to Last
-                      </MagneticButton>
+                    <div className="relative">
+                      <CameraPreview stream={cameraStream} />
+                      <div className="absolute top-2 right-2">
+                        <div className="flex items-center space-x-1 bg-green-500 text-white px-2 py-1 rounded-full text-xs">
+                          <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                          <span>Live</span>
+                        </div>
+                      </div>
                     </div>
+                    
+                    <p className="text-xs text-gray-500 mt-2 text-center">
+                      Your video is being monitored for exam integrity
+                    </p>
                   </div>
-                </GlassCard>
-              </AnimatedCard>
+                </Card>
+              )}
             </motion.div>
           </div>
         </div>

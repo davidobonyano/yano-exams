@@ -189,8 +189,7 @@ export default function Dashboard() {
                   initial={{ opacity: 0, y: 30, scale: 0.95 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ delay: 1 + index * 0.1, duration: 0.6 }}
-                  whileHover={{ y: -5, scale: 1.02 }}
-                  className="bg-white/10 backdrop-blur-md border border-white/20 overflow-hidden shadow-xl rounded-2xl group"
+                  className="bg-white/10 backdrop-blur-md border border-white/20 overflow-hidden shadow-xl rounded-2xl group hover:shadow-2xl transition-shadow duration-300"
                 >
                   <div className="p-6">
                     <div className="flex items-center justify-between mb-4">
@@ -248,7 +247,7 @@ export default function Dashboard() {
                       {canTake ? (
                         <Link
                           href={`/exam/${exam.id}`}
-                          className="w-full inline-flex justify-center items-center gap-2 px-6 py-3 text-sm font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-all duration-300 group-hover:shadow-lg"
+                          className="w-full inline-flex justify-center items-center gap-2 px-6 py-3 text-sm font-bold rounded-xl text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 transition-colors duration-200"
                         >
                           <Play className="w-4 h-4" />
                           {exam.attempt?.status === 'in_progress' ? 'Continue Exam' : 'Start Exam'}
@@ -265,7 +264,7 @@ export default function Dashboard() {
                           {exam.attempt && (
                             <Link
                               href={`/results/${exam.attempt.id}`}
-                              className="w-full inline-flex justify-center items-center gap-2 px-6 py-3 text-sm font-bold rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 transition-all duration-300"
+                              className="w-full inline-flex justify-center items-center gap-2 px-6 py-3 text-sm font-bold rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 transition-colors duration-200"
                             >
                               <Eye className="w-4 h-4" />
                               View Results

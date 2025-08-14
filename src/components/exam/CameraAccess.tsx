@@ -27,23 +27,114 @@ export default function CameraAccess({
   sessionName, 
   cameraRequired 
 }: CameraAccessProps) {
-  const [status, setStatus] = useState<'requesting' | 'granted' | 'denied' | 'error'>('requesting')
+  const [status, setStatus] = useState<'requesting' | 'granted' | 'denied' | 'error' | 'testing'>('requesting')
   const [stream, setStream] = useState<MediaStream | null>(null)
   const [error, setError] = useState<string>('')
+  const [cameraDevices, setCameraDevices] = useState<MediaDeviceInfo[]>([])
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('')
   const videoRef = useRef<HTMLVideoElement>(null)
+
+  // Detect available cameras
+  const detectCameras = async () => {
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices()
+      const videoDevices = devices.filter(device => device.kind === 'videoinput')
+      setCameraDevices(videoDevices)
+      if (videoDevices.length > 0 && !selectedDeviceId) {
+        setSelectedDeviceId(videoDevices[0].deviceId)
+      }
+    } catch (error) {
+      console.error('Error detecting cameras:', error)
+    }
+  }
+
+  // Test camera functionality
+  const testCamera = async () => {
+    setStatus('testing')
+    await requestCameraAccess()
+  }
+
+  // Auto-detect cameras on component mount
+  useState(() => {
+    detectCameras()
+  })
 
   const requestCameraAccess = async () => {
     try {
       setStatus('requesting')
       setError('')
 
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-          facingMode: 'user'
-        },
-        audio: false
+      // Check if getUserMedia is supported
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Camera access not supported by this browser')
+      }
+
+      let mediaStream: MediaStream | null = null
+
+      try {
+        // Try high quality first
+        const videoConstraints: any = {
+          width: { ideal: 1280, min: 640 },
+          height: { ideal: 720, min: 480 },
+          frameRate: { ideal: 30, min: 15 }
+        }
+        
+        // Use selected device if available
+        if (selectedDeviceId) {
+          videoConstraints.deviceId = { exact: selectedDeviceId }
+        } else {
+          videoConstraints.facingMode = 'user'
+        }
+
+        mediaStream = await navigator.mediaDevices.getUserMedia({
+          video: videoConstraints,
+          audio: false
+        })
+      } catch (highQualityError) {
+        console.log('High quality failed, trying standard quality:', highQualityError)
+        
+        try {
+          // Fallback to standard quality
+          const videoConstraints: any = {
+            width: { ideal: 640 },
+            height: { ideal: 480 }
+          }
+          
+          if (selectedDeviceId) {
+            videoConstraints.deviceId = { exact: selectedDeviceId }
+          } else {
+            videoConstraints.facingMode = 'user'
+          }
+
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: videoConstraints,
+            audio: false
+          })
+        } catch (standardError) {
+          console.log('Standard quality failed, trying basic access:', standardError)
+          
+          // Last fallback - basic video access
+          mediaStream = await navigator.mediaDevices.getUserMedia({
+            video: selectedDeviceId ? { deviceId: selectedDeviceId } : true,
+            audio: false
+          })
+        }
+      }
+
+      if (!mediaStream) {
+        throw new Error('Failed to access camera')
+      }
+
+      // Check if stream tracks are active
+      const videoTracks = mediaStream.getVideoTracks()
+      console.log('Video tracks:', videoTracks.length)
+      videoTracks.forEach((track, index) => {
+        console.log(`Track ${index}:`, {
+          kind: track.kind,
+          enabled: track.enabled,
+          readyState: track.readyState,
+          settings: track.getSettings()
+        })
       })
 
       setStream(mediaStream)
@@ -51,10 +142,27 @@ export default function CameraAccess({
 
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream
+        console.log('Set video source to camera stream')
+        
+        // Add event listeners to debug video
+        videoRef.current.onloadedmetadata = () => {
+          console.log('Video metadata loaded, starting playback')
+          videoRef.current?.play().catch(e => console.log('Video play error:', e))
+        }
+        
+        videoRef.current.oncanplay = () => {
+          console.log('Video can play')
+        }
+        
+        videoRef.current.onerror = (e) => {
+          console.error('Video error:', e)
+        }
       }
 
       // Call the callback after a short delay to show the preview
       setTimeout(() => {
+        // Don't pass the stream to cleanup when we're handing it over
+        console.log('Handing camera stream to parent component')
         onCameraGranted(mediaStream)
       }, 2000)
 
@@ -63,13 +171,17 @@ export default function CameraAccess({
       setStatus('denied')
       
       if (err.name === 'NotAllowedError') {
-        setError('Camera access denied. Please allow camera access to continue.')
+        setError('Camera access denied. Please click "Allow" when prompted, or check your browser camera permissions.')
       } else if (err.name === 'NotFoundError') {
-        setError('No camera found. Please connect a camera to continue.')
+        setError('No camera found. Please connect a camera to your device and try again.')
       } else if (err.name === 'NotReadableError') {
-        setError('Camera is being used by another application.')
+        setError('Camera is being used by another application. Please close other apps using the camera.')
+      } else if (err.name === 'NotSupportedError') {
+        setError('Camera access not supported. Please use a modern browser like Chrome, Firefox, or Safari.')
+      } else if (err.name === 'OverconstrainedError') {
+        setError('Camera constraints not supported. Please ensure you have a working camera.')
       } else {
-        setError('Unable to access camera. Please check your permissions.')
+        setError(`Camera error: ${err.message || 'Unable to access camera. Please check your permissions and try again.'}`)
       }
     }
   }
@@ -84,12 +196,14 @@ export default function CameraAccess({
 
   useEffect(() => {
     return () => {
-      // Cleanup stream on unmount
-      if (stream) {
+      // Only cleanup stream on unmount if camera was denied or error occurred
+      // Don't cleanup if camera was granted (status === 'granted') as stream is handed to parent
+      if (stream && status !== 'granted') {
+        console.log('Cleaning up camera stream on unmount (status:', status, ')')
         stream.getTracks().forEach(track => track.stop())
       }
     }
-  }, [stream])
+  }, [stream, status])
 
   return (
     <div className="fixed inset-0 z-[9999] overflow-y-auto bg-gradient-to-br from-blue-900/90 via-purple-900/90 to-indigo-900/90 backdrop-blur-sm">

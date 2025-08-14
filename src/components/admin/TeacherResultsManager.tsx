@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
+import { getDetailedStudentResults, getSessionDetailedResults, DetailedStudentResult, SessionDetailedResults } from '@/lib/auto-scoring'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -62,6 +63,8 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
   const [sessions, setSessions] = useState<any[]>([])
   const [emailAddress, setEmailAddress] = useState('')
   const [emailingResults, setEmailingResults] = useState<Set<string>>(new Set())
+  const [selectedStudentDetails, setSelectedStudentDetails] = useState<DetailedStudentResult | null>(null)
+  const [showStudentDetails, setShowStudentDetails] = useState(false)
 
   useEffect(() => {
     loadResults()
@@ -201,6 +204,21 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
         newSet.delete(resultId)
         return newSet
       })
+    }
+  }
+
+  const viewStudentDetails = async (attemptId: string) => {
+    try {
+      const details = await getDetailedStudentResults(attemptId)
+      if (details) {
+        setSelectedStudentDetails(details)
+        setShowStudentDetails(true)
+      } else {
+        toast.error('Failed to load student details')
+      }
+    } catch (error) {
+      console.error('Error loading student details:', error)
+      toast.error('Failed to load student details')
     }
   }
 
@@ -367,30 +385,38 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
                             </Badge>
                           </td>
                           <td className="py-4 px-6">
-                            <div className="flex items-center space-x-2">
-                              <div className="flex items-center space-x-2">
-                                <Input
-                                  type="email"
-                                  placeholder="student@email.com"
-                                  value={emailAddress}
-                                  onChange={(e) => setEmailAddress(e.target.value)}
-                                  className="w-48 h-8 text-sm"
-                                />
-                                <Button
-                                  onClick={() => sendResultByEmail(result.id, result.students.full_name)}
-                                  disabled={emailingResults.has(result.id)}
-                                  size="sm"
-                                  className="h-8"
-                                >
+                          <div className="flex items-center space-x-2">
+                          <Button
+                          onClick={() => viewStudentDetails(result.attempt_id)}
+                          variant="outline"
+                          size="sm"
+                          className="h-8"
+                          >
+                          <Eye className="w-3 h-3 mr-1" /> View Details
+                          </Button>
+                          <div className="flex items-center space-x-2">
+                          <Input
+                          type="email"
+                          placeholder="student@email.com"
+                          value={emailAddress}
+                            onChange={(e) => setEmailAddress(e.target.value)}
+                          className="w-48 h-8 text-sm"
+                          />
+                          <Button
+                          onClick={() => sendResultByEmail(result.id, result.students.full_name)}
+                          disabled={emailingResults.has(result.id)}
+                            size="sm"
+                              className="h-8"
+                              >
                                   {emailingResults.has(result.id) ? (
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                  ) : (
-                                    <><Send className="w-3 h-3 mr-1" /> Email</>
-                                  )}
-                                </Button>
-                              </div>
-                            </div>
-                          </td>
+                                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                   ) : (
+                                     <><Send className="w-3 h-3 mr-1" /> Email</>
+                                   )}
+                                 </Button>
+                               </div>
+                             </div>
+                           </td>
                         </motion.tr>
                       ))}
                     </tbody>
@@ -415,6 +441,144 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
           </CardContent>
         </Card>
       )}
+
+      {/* Student Details Modal */}
+      <AnimatePresence>
+        {showStudentDetails && selectedStudentDetails && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => setShowStudentDetails(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="p-6 border-b flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-semibold">
+                    {selectedStudentDetails.attempt_info.student_name} - Detailed Results
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {selectedStudentDetails.attempt_info.exam_title} • {selectedStudentDetails.attempt_info.session_name}
+                  </p>
+                </div>
+                <Button
+                  onClick={() => setShowStudentDetails(false)}
+                  variant="outline"
+                  size="sm"
+                >
+                  Close
+                </Button>
+              </div>
+
+              <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
+                <div className="p-6 space-y-6">
+                  {/* Summary */}
+                  <div className="grid grid-cols-4 gap-4">
+                    <Card>
+                      <CardContent className="p-4 text-center">
+                        <div className="text-2xl font-bold text-blue-600">
+                          {selectedStudentDetails.attempt_info.percentage_score.toFixed(1)}%
+                        </div>
+                        <div className="text-sm text-muted-foreground">Final Score</div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4 text-center">
+                        <div className="text-2xl font-bold text-green-600">
+                          {selectedStudentDetails.attempt_info.correct_answers}
+                        </div>
+                        <div className="text-sm text-muted-foreground">Correct</div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4 text-center">
+                        <div className="text-2xl font-bold text-orange-600">
+                          {selectedStudentDetails.attempt_info.total_questions - selectedStudentDetails.attempt_info.correct_answers}
+                        </div>
+                        <div className="text-sm text-muted-foreground">Incorrect</div>
+                      </CardContent>
+                    </Card>
+                    <Card>
+                      <CardContent className="p-4 text-center">
+                        <div className="text-2xl font-bold">
+                          {selectedStudentDetails.attempt_info.points_earned}/{selectedStudentDetails.attempt_info.total_points}
+                        </div>
+                        <div className="text-sm text-muted-foreground">Points</div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Questions */}
+                  <div className="space-y-4">
+                    <h3 className="text-lg font-semibold">Question-by-Question Breakdown</h3>
+                    {selectedStudentDetails.detailed_answers.map((answer, index) => (
+                      <Card key={answer.question_id} className="overflow-hidden">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between mb-3">
+                            <h4 className="font-medium">Question {answer.question_number}</h4>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant={answer.is_correct ? "default" : "destructive"}>
+                                {answer.is_correct ? (
+                                  <>
+                                    <CheckCircle className="w-3 h-3 mr-1" />
+                                    Correct
+                                  </>
+                                ) : (
+                                  <>
+                                    <XCircle className="w-3 h-3 mr-1" />
+                                    Incorrect
+                                  </>
+                                )}
+                              </Badge>
+                              <span className="text-sm text-muted-foreground">
+                                {answer.points_earned}/{answer.question_points} pts
+                              </span>
+                            </div>
+                          </div>
+
+                          <p className="text-sm mb-4 p-3 bg-gray-50 rounded">
+                            {answer.question_text}
+                          </p>
+
+                          <div className="space-y-2 text-sm">
+                            <div className="flex items-start space-x-2">
+                              <span className="font-medium min-w-fit">Student Answer:</span>
+                              <span className={answer.is_correct ? 'text-green-600' : 'text-red-600'}>
+                                {answer.student_answer_text}
+                              </span>
+                            </div>
+
+                            {!answer.is_correct && (
+                              <div className="flex items-start space-x-2">
+                                <span className="font-medium min-w-fit">Correct Answer:</span>
+                                <span className="text-green-600">{answer.correct_answer_text}</span>
+                              </div>
+                            )}
+
+                            {answer.explanation && (
+                              <div className="flex items-start space-x-2">
+                                <span className="font-medium min-w-fit">Explanation:</span>
+                                <span className="text-muted-foreground">{answer.explanation}</span>
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

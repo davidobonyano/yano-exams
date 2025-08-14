@@ -234,7 +234,7 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
     if (blocks.length === 1) {
       // Split the text whenever we find a new "Q:" that's not at the beginning
       const lines = text.split('\n')
-      let currentBlock = []
+      let currentBlock: string[] = []
       const allBlocks = []
       
       for (let i = 0; i < lines.length; i++) {

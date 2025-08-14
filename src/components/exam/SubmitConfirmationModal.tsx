@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MagneticButton } from '@/components/ui/magnetic-button'
-import { Send, X, CheckCircle, AlertTriangle, Clock } from 'lucide-react'
+import { Send, X, CheckCircle, AlertTriangle } from 'lucide-react'
 
 interface SubmitConfirmationModalProps {
   isOpen: boolean
@@ -35,11 +35,7 @@ export default function SubmitConfirmationModal({
     }
   }
 
-  const formatTime = (seconds: number) => {
-    const minutes = Math.floor(seconds / 60)
-    const remainingSeconds = seconds % 60
-    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`
-  }
+
 
   return (
     <AnimatePresence>
@@ -149,28 +145,22 @@ export default function SubmitConfirmationModal({
 
                       {/* Stats */}
                       <motion.div
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.3 }}
-                        className="grid grid-cols-3 gap-3"
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.3 }}
+                      className="grid grid-cols-2 gap-4"
                       >
-                        <div className="text-center p-3 bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl border border-green-200">
-                          <CheckCircle className="w-5 h-5 text-green-600 mx-auto mb-1" />
-                          <div className="text-lg font-bold text-green-600">{questionsAnswered}</div>
-                          <div className="text-xs text-green-600">Answered</div>
-                        </div>
-                        
-                        <div className="text-center p-3 bg-gradient-to-br from-orange-50 to-red-100 rounded-xl border border-orange-200">
-                          <AlertTriangle className="w-5 h-5 text-orange-600 mx-auto mb-1" />
-                          <div className="text-lg font-bold text-orange-600">{unansweredCount}</div>
-                          <div className="text-xs text-orange-600">Unanswered</div>
-                        </div>
-                        
-                        <div className="text-center p-3 bg-gradient-to-br from-blue-50 to-cyan-100 rounded-xl border border-blue-200">
-                          <Clock className="w-5 h-5 text-blue-600 mx-auto mb-1" />
-                          <div className="text-lg font-bold text-blue-600">{formatTime(timeRemaining)}</div>
-                          <div className="text-xs text-blue-600">Time Left</div>
-                        </div>
+                      <div className="text-center p-4 bg-gradient-to-br from-green-50 to-emerald-100 rounded-xl border border-green-200">
+                      <CheckCircle className="w-6 h-6 text-green-600 mx-auto mb-2" />
+                      <div className="text-2xl font-bold text-green-600">{questionsAnswered}</div>
+                      <div className="text-sm text-green-600">Answered</div>
+                      </div>
+                      
+                      <div className="text-center p-4 bg-gradient-to-br from-orange-50 to-red-100 rounded-xl border border-orange-200">
+                      <AlertTriangle className="w-6 h-6 text-orange-600 mx-auto mb-2" />
+                      <div className="text-2xl font-bold text-orange-600">{unansweredCount}</div>
+                      <div className="text-sm text-orange-600">Unanswered</div>
+                      </div>
                       </motion.div>
 
                       {/* Warning for unanswered questions */}

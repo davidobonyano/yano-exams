@@ -21,7 +21,7 @@ export default function AdminResultsPage() {
   useEffect(() => {
     if (!loading && !profile) {
       router.push('/auth/login')
-    } else if (!loading && profile && profile.role !== 'teacher') {
+    } else if (!loading && profile && (profile as any).role !== 'teacher') {
       router.push('/dashboard')
     }
   }, [profile, loading, router])
@@ -34,7 +34,7 @@ export default function AdminResultsPage() {
     )
   }
 
-  if (!profile || profile.role !== 'teacher') {
+  if (!profile || (profile as any).role !== 'teacher') {
     return null
   }
 

@@ -358,6 +358,28 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
     }
   }
 
+  const toggleShowResults = async (sessionId: string, currentValue: boolean, sessionName: string) => {
+    try {
+      const { error } = await supabase
+        .from('exam_sessions')
+        .update({ 
+          show_results_after_submit: !currentValue,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', sessionId)
+        .eq('teacher_id', user.id)
+
+      if (error) throw error
+
+      const action = !currentValue ? 'enabled' : 'disabled'
+      toast.success(`Result visibility ${action} for "${sessionName}"`)
+      fetchTeacherDataSilently()
+    } catch (error) {
+      console.error('Error updating result visibility:', error)
+      toast.error('Failed to update result visibility')
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 relative overflow-hidden">
@@ -387,37 +409,46 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+      {/* Modern Header */}
+      <div className="bg-white/80 backdrop-blur-sm shadow-lg border-b border-slate-200/60">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center">
-              <h1 className="text-xl font-bold text-gray-900">Teacher Dashboard</h1>
+          <div className="flex justify-between items-center h-20">
+            <div className="flex items-center space-x-4">
+              <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
+                <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-900 to-slate-700 bg-clip-text text-transparent">
+                  Welcome, {teacher?.full_name || 'Teacher'}
+                </h1>
+                <p className="text-sm text-slate-500 mt-0.5">Exam Management Dashboard</p>
+              </div>
             </div>
 
-            <div className="flex items-center space-x-4">
-              <button
-                onClick={() => fetchTeacherDataSilently()}
-                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Refresh
-              </button>
-              <div className="text-sm text-gray-700">
-                <span className="font-medium">{teacher?.full_name}</span>
-                {teacher?.school_name && (
-                  <span className="ml-2 px-2 py-1 text-xs bg-indigo-100 text-indigo-800 rounded-full">
-                    {teacher.school_name}
+            <div className="flex items-center space-x-3">
+              {teacher?.school_name && (
+                <div className="hidden md:flex items-center px-3 py-2 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-xl">
+                  <div className="w-2 h-2 bg-indigo-400 rounded-full mr-2"></div>
+                  <span className="text-sm font-medium text-indigo-700">{teacher.school_name}</span>
+                </div>
+              )}
+              
+              <div className="flex items-center space-x-3">
+                <div className="w-8 h-8 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-full flex items-center justify-center">
+                  <span className="text-sm font-semibold text-white">
+                    {teacher?.full_name?.charAt(0)?.toUpperCase() || 'T'}
                   </span>
-                )}
+                </div>
+                <button
+                  onClick={handleSignOut}
+                  className="text-sm text-slate-500 hover:text-slate-700 font-medium hover:bg-slate-100 px-3 py-2 rounded-lg transition-colors duration-200"
+                >
+                  Sign Out
+                </button>
               </div>
-              <button
-                onClick={handleSignOut}
-                className="text-sm text-gray-500 hover:text-gray-700 font-medium"
-              >
-                Sign Out
-              </button>
             </div>
           </div>
         </div>
@@ -425,104 +456,139 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Stats */}
+        {/* Modern Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                  </svg>
+          <div className="group relative bg-gradient-to-br from-white to-blue-50/50 border border-slate-200/60 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="relative p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600">Total Exams</p>
+                    <p className="text-3xl font-bold text-slate-900">{exams.length}</p>
+                  </div>
                 </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">Total Exams</dt>
-                    <dd className="text-lg font-medium text-gray-900">{exams.length}</dd>
-                  </dl>
-                </div>
+                <div className="text-2xl">📚</div>
               </div>
             </div>
           </div>
 
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-                  </svg>
-                </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">Active Sessions</dt>
-                    <dd className="text-lg font-medium text-gray-900">
+          <div className="group relative bg-gradient-to-br from-white to-green-50/50 border border-slate-200/60 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-green-500/5 to-emerald-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="relative p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-green-500 to-emerald-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600">Active Sessions</p>
+                    <p className="text-3xl font-bold text-slate-900">
                       {sessions.filter(s => s.status === 'active').length}
-                    </dd>
-                  </dl>
+                    </p>
+                  </div>
                 </div>
+                <div className="text-2xl">🎯</div>
               </div>
             </div>
           </div>
 
-          <div className="bg-white overflow-hidden shadow rounded-lg">
-            <div className="p-5">
-              <div className="flex items-center">
-                <div className="flex-shrink-0">
-                  <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-                  </svg>
+          <div className="group relative bg-gradient-to-br from-white to-purple-50/50 border border-slate-200/60 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-violet-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+            <div className="relative p-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-purple-500 to-violet-600 rounded-xl flex items-center justify-center shadow-lg">
+                    <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-slate-600">Total Sessions</p>
+                    <p className="text-3xl font-bold text-slate-900">{sessions.length}</p>
+                  </div>
                 </div>
-                <div className="ml-5 w-0 flex-1">
-                  <dl>
-                    <dt className="text-sm font-medium text-gray-500 truncate">Total Sessions</dt>
-                    <dd className="text-lg font-medium text-gray-900">{sessions.length}</dd>
-                  </dl>
-                </div>
+                <div className="text-2xl">📊</div>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Quick Actions */}
+        {/* Modern Quick Actions */}
         <div className="mb-8">
-          <div className="flex flex-wrap gap-4">
+          <h2 className="text-xl font-semibold text-slate-800 mb-6">Quick Actions</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <button
               onClick={() => setShowCreateExam(true)}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+              className="group relative bg-gradient-to-br from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
             >
-              <svg className="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
-              </svg>
-              Create New Exam
+              <div className="flex flex-col items-center text-center space-y-3">
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-semibold">Create New Exam</h3>
+                  <p className="text-xs text-white/80 mt-1">Build a custom exam</p>
+                </div>
+              </div>
             </button>
 
             <button
               onClick={() => handleCreateDemoExam()}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500"
+              className="group relative bg-gradient-to-br from-emerald-500 to-green-600 hover:from-emerald-600 hover:to-green-700 text-white p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
             >
-              <svg className="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-              </svg>
-              Create Demo Exam
+              <div className="flex flex-col items-center text-center space-y-3">
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-semibold">Create Demo Exam</h3>
+                  <p className="text-xs text-white/80 mt-1">Quick test setup</p>
+                </div>
+              </div>
             </button>
             
             <button
               onClick={() => setShowStudentManagement(true)}
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+              className="group relative bg-gradient-to-br from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
             >
-              <svg className="-ml-1 mr-2 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
-              </svg>
-              Manage Students
+              <div className="flex flex-col items-center text-center space-y-3">
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="font-semibold">Manage Students</h3>
+                  <p className="text-xs text-white/80 mt-1">Student registration</p>
+                </div>
+              </div>
             </button>
             
             <a
               href="/admin/results"
-              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+              className="group relative bg-gradient-to-br from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
             >
-              <Mail className="-ml-1 mr-2 h-5 w-5" />
-              Manage Results & Email
+              <div className="flex flex-col items-center text-center space-y-3">
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <Mail className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Results & Email</h3>
+                  <p className="text-xs text-white/80 mt-1">Manage exam results</p>
+                </div>
+              </div>
             </a>
           </div>
         </div>
@@ -726,7 +792,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
                               </button>
                             </div>
                           )}
-                          {session.status === 'completed' && (
+                          {session.status === 'ended' && (
                             <button
                               onClick={() => handleViewResults(session)}
                               className="inline-flex items-center px-2 py-1 text-xs font-medium text-emerald-600 bg-emerald-100 hover:bg-emerald-200 rounded transition-colors"
@@ -740,13 +806,33 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
                         </div>
                       </div>
                       <div className="mt-2 sm:flex sm:justify-between">
-                        <div className="sm:flex">
+                        <div className="sm:flex sm:justify-between">
                           <p className="flex items-center text-sm text-gray-500">
                             <svg className="flex-shrink-0 mr-1.5 h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
                             {new Date(session.starts_at).toLocaleString()} - {new Date(session.ends_at).toLocaleString()}
                           </p>
+                          <div className="mt-2 sm:mt-0 flex items-center space-x-4">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs text-gray-500">Show Results:</span>
+                              <button
+                                onClick={() => toggleShowResults(session.id, session.show_results_after_submit || false, session.session_name)}
+                                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${
+                                  session.show_results_after_submit ? 'bg-indigo-600' : 'bg-gray-200'
+                                }`}
+                              >
+                                <span
+                                  className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                                    session.show_results_after_submit ? 'translate-x-5' : 'translate-x-1'
+                                  }`}
+                                />
+                              </button>
+                              <span className={`text-xs ${session.show_results_after_submit ? 'text-indigo-600' : 'text-gray-400'}`}>
+                                {session.show_results_after_submit ? 'ON' : 'OFF'}
+                              </span>
+                            </div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -761,7 +847,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
         {/* Completed/Ended Sessions */}
         {sessions.filter(s => {
           const actualStatus = getActualSessionStatus(s)
-          return actualStatus === 'expired' || s.status === 'completed' || s.status === 'ended'
+          return actualStatus === 'expired' || s.status === 'ended'
         }).length > 0 && (
           <div className="mt-8">
             <div className="flex items-center justify-between mb-4">
@@ -769,7 +855,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
               <span className="text-sm text-gray-500">
                 {sessions.filter(s => {
                   const actualStatus = getActualSessionStatus(s)
-                  return actualStatus === 'expired' || s.status === 'completed' || s.status === 'ended'
+                  return actualStatus === 'expired' || s.status === 'ended'
                 }).length} completed
               </span>
             </div>
@@ -778,7 +864,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
                 {sessions
                   .filter(session => {
                     const actualStatus = getActualSessionStatus(session)
-                    return actualStatus === 'expired' || session.status === 'completed' || session.status === 'ended'
+                    return actualStatus === 'expired' || session.status === 'ended'
                   })
                   .slice(0, 5)
                   .map((session) => {
@@ -799,11 +885,11 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
                           <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                             actualStatus === 'expired' 
                               ? 'bg-red-100 text-red-800' 
-                              : actualStatus === 'completed'
+                              : session.status === 'ended'
                               ? 'bg-green-100 text-green-800'
                               : 'bg-gray-100 text-gray-800'
                           }`}>
-                            {actualStatus}
+                            {actualStatus === 'expired' ? 'Expired' : session.status === 'ended' ? 'Ended' : actualStatus}
                           </span>
                           <div className="flex items-center space-x-2">
                             <span className="text-sm font-mono text-gray-500">
@@ -822,7 +908,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
                             </button>
                           </div>
                           <div className="flex gap-2">
-                            {(session.status === 'completed' || actualStatus === 'expired') && (
+                            {(session.status === 'ended' || actualStatus === 'expired') && (
                               <button
                                 onClick={() => handleViewResults(session)}
                                 className="inline-flex items-center px-3 py-2 text-sm font-medium text-emerald-600 bg-emerald-100 hover:bg-emerald-200 rounded-lg transition-colors"

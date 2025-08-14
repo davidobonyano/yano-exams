@@ -193,9 +193,14 @@ BEGIN
       'already_joined', true,
       'student_name', v_student.full_name,
       'session_id', v_session.id,
+      'session_code', v_session.session_code,
       'exam_id', v_session.exam_id,
       'exam_title', v_exam.title,
       'duration_minutes', v_exam.duration_minutes,
+      'instructions', v_session.instructions,
+      'camera_monitoring_enabled', v_session.camera_monitoring_enabled,
+      'show_results_after_submit', v_session.show_results_after_submit,
+      'teacher_id', v_session.teacher_id,
       'participant_id', v_existing_participant,
       'student_id', v_student.id
     );
@@ -221,10 +226,14 @@ BEGIN
     'already_joined', false,
     'student_name', v_student.full_name,
     'session_id', v_session.id,
+    'session_code', v_session.session_code,
     'exam_id', v_session.exam_id,
     'exam_title', v_exam.title,
     'duration_minutes', v_exam.duration_minutes,
     'instructions', v_session.instructions,
+    'camera_monitoring_enabled', v_session.camera_monitoring_enabled,
+    'show_results_after_submit', v_session.show_results_after_submit,
+    'teacher_id', v_session.teacher_id,
     'participant_id', v_participant_id,
     'student_id', (SELECT students.id FROM public.students students WHERE students.student_id = p_student_id LIMIT 1)
   );

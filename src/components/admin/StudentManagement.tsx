@@ -343,8 +343,17 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
           className="w-full max-w-7xl bg-white rounded-2xl shadow-2xl overflow-hidden"
         >
           {/* Header */}
-          <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 p-6 text-white">
-            <div className="flex items-center justify-between">
+          <div className="bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 p-6 text-white relative">
+            {/* Close Button - Top Right */}
+            <button
+              onClick={onClose}
+              className="absolute right-4 top-4 z-10 p-2 hover:bg-white/20 rounded-full transition-colors"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            
+            {/* Title Section */}
+            <div className="pr-16 mb-4">
               <div className="flex items-center space-x-4">
                 <Users className="w-8 h-8" />
                 <div>
@@ -352,12 +361,33 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
                   <p className="opacity-90">Manage your class roster and generate student IDs</p>
                 </div>
               </div>
-              <button
-                onClick={onClose}
-                className="p-2 hover:bg-white/20 rounded-full transition-colors"
+            </div>
+            
+            {/* Action Buttons - Below Title */}
+            <div className="flex flex-wrap items-center gap-3">
+              <MagneticButton
+                onClick={() => setShowAddForm(true)}
+                className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-xl"
               >
-                <X className="w-6 h-6" />
-              </button>
+                <UserPlus className="w-4 h-4 mr-2" />
+                Add Student
+              </MagneticButton>
+              
+              <MagneticButton
+                onClick={() => setShowBulkImport(true)}
+                className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-xl"
+              >
+                <Upload className="w-4 h-4 mr-2" />
+                Bulk Import
+              </MagneticButton>
+
+              <MagneticButton
+                onClick={exportStudents}
+                className="bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-xl"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </MagneticButton>
             </div>
           </div>
 
@@ -383,60 +413,30 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
             </div>
           </div>
 
-          {/* Actions Bar */}
+          {/* Search and Filter Bar */}
           <div className="p-6 border-b bg-white">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center space-x-4">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                  <input
-                    type="text"
-                    placeholder="Search students..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
-                  />
-                </div>
-                
-                <EnhancedSelect
-                  options={[
-                    { value: 'all', label: '📚 All Classes' },
-                    ...CLASS_LEVELS
-                  ]}
-                  value={selectedClass}
-                  onChange={(value) => setSelectedClass(value as ClassLevel | 'all')}
-                  placeholder="Filter by class"
-                  className="min-w-[200px]"
+            <div className="flex flex-wrap items-center gap-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="Search students..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10 pr-4 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 w-64"
                 />
               </div>
-
-              <div className="flex items-center space-x-3">
-                <MagneticButton
-                  onClick={() => setShowAddForm(true)}
-                  className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-xl"
-                >
-                  <UserPlus className="w-4 h-4 mr-2" />
-                  Add Student
-                </MagneticButton>
-                
-                <MagneticButton
-                  onClick={() => setShowBulkImport(true)}
-                  variant="outline"
-                  className="px-4 py-2 rounded-xl"
-                >
-                  <Upload className="w-4 h-4 mr-2" />
-                  Bulk Import
-                </MagneticButton>
-
-                <MagneticButton
-                  onClick={exportStudents}
-                  variant="outline"
-                  className="px-4 py-2 rounded-xl"
-                >
-                  <Download className="w-4 h-4 mr-2" />
-                  Export CSV
-                </MagneticButton>
-              </div>
+              
+              <EnhancedSelect
+                options={[
+                  { value: 'all', label: '📚 All Classes' },
+                  ...CLASS_LEVELS
+                ]}
+                value={selectedClass}
+                onChange={(value) => setSelectedClass(value as ClassLevel | 'all')}
+                placeholder="Filter by class"
+                className="min-w-[200px]"
+              />
             </div>
           </div>
 

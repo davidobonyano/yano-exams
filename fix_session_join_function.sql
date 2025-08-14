@@ -1,0 +1,122 @@
+-- Fix join_session_by_student_id function to include show_results_after_submit and other session fields
+
+DROP FUNCTION IF EXISTS public.join_session_by_student_id CASCADE;
+
+CREATE OR REPLACE FUNCTION public.join_session_by_student_id(
+  p_session_code TEXT,
+  p_student_id TEXT
+)
+RETURNS JSONB AS $$
+DECLARE
+  v_session exam_sessions%ROWTYPE;
+  v_student teacher_students%ROWTYPE;
+  v_exam exams%ROWTYPE;
+  v_existing_participant UUID;
+  v_participant_id UUID;
+BEGIN
+  -- Find the active session
+  SELECT * INTO v_session
+  FROM public.exam_sessions
+  WHERE session_code = p_session_code
+  AND status = 'active'
+  AND NOW() BETWEEN starts_at AND ends_at;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Invalid or expired session code');
+  END IF;
+
+  -- Find the student by student_id
+  SELECT * INTO v_student
+  FROM public.teacher_students
+  WHERE student_id = p_student_id
+  AND teacher_id = v_session.teacher_id
+  AND is_active = true;
+
+  IF NOT FOUND THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Student ID not found or not active');
+  END IF;
+
+  -- Check class level match
+  IF v_student.class_level != v_session.class_level THEN
+    RETURN jsonb_build_object('success', false, 'error', 'Student class level does not match session');
+  END IF;
+
+  -- Get exam details
+  SELECT * INTO v_exam
+  FROM public.exams
+  WHERE id = v_session.exam_id;
+
+  -- Create student record in main students table FIRST (before checking participants)
+  INSERT INTO public.students (student_id, full_name, class_level, school_name)
+  VALUES (v_student.student_id, v_student.full_name, v_student.class_level, v_student.school_name)
+  ON CONFLICT (student_id, school_name) DO UPDATE SET
+    full_name = v_student.full_name,
+    class_level = v_student.class_level;
+
+  -- Check if student already has a participant record
+  SELECT sp.id INTO v_existing_participant
+  FROM public.session_participants sp
+  JOIN public.students s ON s.id = sp.student_id
+  WHERE sp.session_id = v_session.id 
+  AND s.student_id = p_student_id;
+
+  IF v_existing_participant IS NOT NULL THEN
+    -- Student already joined, return existing participation
+    RETURN jsonb_build_object(
+      'success', true,
+      'already_joined', true,
+      'student_name', v_student.full_name,
+      'student_class_level', v_student.class_level,
+      'session_id', v_session.id,
+      'session_code', v_session.session_code,
+      'exam_id', v_session.exam_id,
+      'exam_title', v_exam.title,
+      'duration_minutes', v_exam.duration_minutes,
+      'instructions', v_session.instructions,
+      'camera_monitoring_enabled', COALESCE(v_session.camera_monitoring_enabled, false),
+      'show_results_after_submit', COALESCE(v_session.show_results_after_submit, false),
+      'teacher_id', v_session.teacher_id,
+      'participant_id', v_existing_participant,
+      'student_id', (SELECT students.id FROM public.students students WHERE students.student_id = p_student_id LIMIT 1)
+    );
+  END IF;
+
+  -- Student record already created above, no need to create again
+
+  -- Join the session
+  INSERT INTO public.session_participants (session_id, student_id)
+  SELECT v_session.id, students.id
+  FROM public.students students
+  WHERE students.student_id = p_student_id
+  AND (v_student.school_name IS NULL OR students.school_name = v_student.school_name)
+  RETURNING public.session_participants.id INTO v_participant_id;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'already_joined', false,
+    'student_name', v_student.full_name,
+    'student_class_level', v_student.class_level,
+    'session_id', v_session.id,
+    'session_code', v_session.session_code,
+    'exam_id', v_session.exam_id,
+    'exam_title', v_exam.title,
+    'duration_minutes', v_exam.duration_minutes,
+    'instructions', v_session.instructions,
+    'camera_monitoring_enabled', COALESCE(v_session.camera_monitoring_enabled, false),
+    'show_results_after_submit', COALESCE(v_session.show_results_after_submit, false),
+    'teacher_id', v_session.teacher_id,
+    'participant_id', v_participant_id,
+    'student_id', (SELECT students.id FROM public.students students WHERE students.student_id = p_student_id LIMIT 1)
+  );
+EXCEPTION
+  WHEN OTHERS THEN
+    RETURN jsonb_build_object(
+      'success', false,
+      'error', 'Failed to join session: ' || SQLERRM
+    );
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+GRANT EXECUTE ON FUNCTION public.join_session_by_student_id TO anon, authenticated;
+
+SELECT 'Fixed join_session_by_student_id function to include show_results_after_submit!' as status;

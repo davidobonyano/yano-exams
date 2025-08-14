@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import PersistentExamTimer from './PersistentExamTimer'
 import SessionQuestionDisplay from './SessionQuestionDisplay'
 import SubmitConfirmationModal from './SubmitConfirmationModal'
+import StudentWarningDisplay from './StudentWarningDisplay'
 import { Clock, AlertTriangle, CheckCircle, Circle, ArrowLeft, ArrowRight, Send, Timer, Target } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -415,6 +416,15 @@ export default function SimpleExamInterface({ sessionData, onExamComplete }: Sim
 
   return (
     <div className="min-h-screen bg-gray-50" style={{ userSelect: 'none' }}>
+      {/* Student Warning Display */}
+      {attempt && (
+        <StudentWarningDisplay
+          sessionId={sessionData.session_id}
+          studentId={sessionData.student_id}
+          attemptId={attempt.id}
+        />
+      )}
+
       {/* Persistent Timer */}
       {attempt && (
         <PersistentExamTimer

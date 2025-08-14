@@ -1,9 +1,17 @@
-// Email service for automated result delivery
-import { Resend } from 'resend';
+// Gmail-based email service for automated result delivery
+import nodemailer from 'nodemailer';
 import { supabase } from './supabase';
 
-// Initialize Resend (you'll need to add RESEND_API_KEY to your .env file)
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Create Gmail transporter
+const createTransporter = () => {
+  return nodemailer.createTransporter({
+    service: 'gmail',
+    auth: {
+      user: process.env.SCHOOL_GMAIL_USER, // e.g., admin@yourschool.edu
+      pass: process.env.SCHOOL_GMAIL_APP_PASSWORD, // Gmail app password
+    },
+  });
+};
 
 interface EmailTemplate {
   subject_template: string;
@@ -51,14 +59,14 @@ function processTemplate(template: string, data: EmailData): string {
   const statusColor = data.passed ? '#065f46' : '#991b1b';
   const passStatusText = data.passed ? 
     `🎉 Congratulations! You passed with ${data.percentage_score}%` : 
-    `Keep trying! You scored ${data.percentage_score}%. Passing score is needed.`;
+    `Keep trying! You scored ${data.percentage_score}%. Continue studying to improve.`;
   
   processed = processed.replace(/{{score_color}}/g, scoreColor);
   processed = processed.replace(/{{status_bg}}/g, statusBg);
   processed = processed.replace(/{{status_color}}/g, statusColor);
   processed = processed.replace(/{{pass_status_text}}/g, passStatusText);
   
-  // Handle questions loop (basic implementation)
+  // Handle questions section
   if (data.questions && data.questions.length > 0) {
     processed = processed.replace(/{{#if include_questions}}[\s\S]*?{{\/if}}/g, (match) => {
       return match.replace(/{{#if include_questions}}|{{\/if}}/g, '');
@@ -66,7 +74,7 @@ function processTemplate(template: string, data: EmailData): string {
     
     // Replace questions loop
     const questionsHtml = data.questions.map((q, index) => `
-      <div class="question ${q.is_correct ? 'correct' : 'incorrect'}">
+      <div style="margin: 15px 0; padding: 15px; background: white; border-radius: 5px; border-left: 4px solid ${q.is_correct ? '#10b981' : '#ef4444'};">
         <p><strong>Q${index + 1}:</strong> ${q.question_text}</p>
         <p><strong>Your Answer:</strong> ${q.student_answer}</p>
         ${!q.is_correct ? `<p><strong>Correct Answer:</strong> ${q.correct_answer}</p>` : ''}
@@ -125,10 +133,10 @@ async function getEmailData(attemptId: string): Promise<EmailData | null> {
     completion_date: new Date(attempt.completed_at).toLocaleDateString(),
     duration_minutes: attempt.duration_minutes || 0,
     class_level: attempt.student_class_level || '',
-    parent_name: 'Parent/Guardian', // Will be filled from student record
-    teacher_name: attempt.teacher_name || 'Your Teacher',
-    teacher_email: attempt.teacher_email || '',
-    school_name: attempt.school_name || 'School',
+    parent_name: 'Parent/Guardian',
+    teacher_name: attempt.teacher_name || 'Teacher',
+    teacher_email: process.env.SCHOOL_GMAIL_USER || '',
+    school_name: process.env.SCHOOL_NAME || 'School',
     questions: questions?.map((q: any) => ({
       question_text: q.question_text,
       student_answer: q.student_answer_text || 'Not answered',
@@ -139,8 +147,8 @@ async function getEmailData(attemptId: string): Promise<EmailData | null> {
   };
 }
 
-// Process and send a single email
-export async function processEmail(emailId: string): Promise<boolean> {
+// Process and send a single email using Gmail
+export async function processEmailWithGmail(emailId: string): Promise<boolean> {
   try {
     // Get email details
     const { data: emailQueue, error: emailError } = await supabase
@@ -184,33 +192,30 @@ export async function processEmail(emailId: string): Promise<boolean> {
       body = processTemplate(template.body_template, emailData);
     }
     
-    // Send email using Resend
-    const { data: emailResult, error: sendError } = await resend.emails.send({
-      from: 'Yano Exam System <noreply@yourdomain.com>', // Update with your domain
-      to: [emailQueue.recipient_email],
+    // Create Gmail transporter
+    const transporter = createTransporter();
+    
+    // Send email
+    const mailOptions = {
+      from: `${process.env.SCHOOL_NAME || 'School'} <${process.env.SCHOOL_GMAIL_USER}>`,
+      to: emailQueue.recipient_email,
       subject: subject,
       html: body,
-    });
+      replyTo: process.env.SCHOOL_GMAIL_USER, // Parents can reply directly to school
+    };
     
-    if (sendError) {
-      console.error('Failed to send email:', sendError);
-      await supabase.rpc('mark_email_failed', {
-        p_email_id: emailId,
-        p_error_message: sendError.message
-      });
-      return false;
-    }
+    const result = await transporter.sendMail(mailOptions);
     
     // Mark as sent
     await supabase.rpc('mark_email_sent', {
       p_email_id: emailId
     });
     
-    console.log('Email sent successfully:', emailResult);
+    console.log('Email sent successfully via Gmail:', result.messageId);
     return true;
     
   } catch (error) {
-    console.error('Error processing email:', error);
+    console.error('Error processing email with Gmail:', error);
     await supabase.rpc('mark_email_failed', {
       p_email_id: emailId,
       p_error_message: error instanceof Error ? error.message : 'Unknown error'
@@ -219,8 +224,8 @@ export async function processEmail(emailId: string): Promise<boolean> {
   }
 }
 
-// Process all pending emails
-export async function processPendingEmails(): Promise<number> {
+// Process all pending emails using Gmail
+export async function processPendingEmailsWithGmail(): Promise<number> {
   try {
     const { data: pendingEmails, error } = await supabase.rpc('get_pending_emails', {
       p_limit: 50
@@ -234,19 +239,19 @@ export async function processPendingEmails(): Promise<number> {
     let sentCount = 0;
     
     for (const email of pendingEmails) {
-      const success = await processEmail(email.email_id);
+      const success = await processEmailWithGmail(email.email_id);
       if (success) {
         sentCount++;
       }
       
-      // Add delay between emails to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Add delay between emails to avoid Gmail rate limiting
+      await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
     }
     
     return sentCount;
     
   } catch (error) {
-    console.error('Error processing pending emails:', error);
+    console.error('Error processing pending emails with Gmail:', error);
     return 0;
   }
 }
