@@ -197,7 +197,6 @@ export default function SubmitConfirmationModal({
                           size="lg"
                           className="flex-1"
                         >
-                          <X className="w-4 h-4 mr-2" />
                           Cancel
                         </MagneticButton>
                         

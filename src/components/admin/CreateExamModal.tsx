@@ -284,7 +284,6 @@ export default function CreateExamModal({ onClose, onCreated }: CreateExamModalP
                       variant="outline"
                       className="flex-1 h-14 text-lg font-semibold bg-white/80 backdrop-blur-sm border-2 border-gray-200 text-gray-700 hover:bg-white hover:border-gray-300 rounded-xl"
                     >
-                      <X className="w-5 h-5 mr-3" />
                       Cancel
                     </MagneticButton>
                   </motion.div>

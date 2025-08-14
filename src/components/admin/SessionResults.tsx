@@ -390,7 +390,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                       <tbody className="bg-white divide-y divide-gray-200">
                         {results.map((result, index) => (
                         <motion.tr
-                        key={`result-${result.id || 'no-id'}-${result.attempt_id || 'no-attempt'}-${index}`}
+                        key={`${result.attempt_id || result.student_id || index}-${index}`}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.1 }}
@@ -527,45 +527,45 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                 <div className="p-6 space-y-6">
                   {/* Summary */}
                   <div className="grid grid-cols-4 gap-4">
-                    <Card key="summary-score">
-                      <CardContent className="p-4 text-center">
-                        <div className="text-2xl font-bold text-blue-600">
-                          {selectedStudentDetails.attempt_info.percentage_score.toFixed(1)}%
-                        </div>
-                        <div className="text-sm text-gray-500">Final Score</div>
-                      </CardContent>
-                    </Card>
-                    <Card key="summary-correct">
-                      <CardContent className="p-4 text-center">
-                        <div className="text-2xl font-bold text-green-600">
-                          {selectedStudentDetails.attempt_info.correct_answers}
-                        </div>
-                        <div className="text-sm text-gray-500">Correct</div>
-                      </CardContent>
-                    </Card>
-                    <Card key="summary-incorrect">
-                      <CardContent className="p-4 text-center">
-                        <div className="text-2xl font-bold text-orange-600">
-                          {selectedStudentDetails.attempt_info.total_questions - selectedStudentDetails.attempt_info.correct_answers}
-                        </div>
-                        <div className="text-sm text-gray-500">Incorrect</div>
-                      </CardContent>
-                    </Card>
-                    <Card key="summary-points">
-                      <CardContent className="p-4 text-center">
-                        <div className="text-2xl font-bold">
-                          {selectedStudentDetails.attempt_info.points_earned}/{selectedStudentDetails.attempt_info.total_points}
-                        </div>
-                        <div className="text-sm text-gray-500">Points</div>
-                      </CardContent>
-                    </Card>
+                  <Card key={`${selectedStudentDetails.attempt_info.attempt_id}-score`}>
+                  <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-blue-600">
+                  {selectedStudentDetails.attempt_info.percentage_score.toFixed(1)}%
+                  </div>
+                  <div className="text-sm text-gray-500">Final Score</div>
+                  </CardContent>
+                  </Card>
+                  <Card key={`${selectedStudentDetails.attempt_info.attempt_id}-correct`}>
+                  <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-green-600">
+                  {selectedStudentDetails.attempt_info.correct_answers}
+                  </div>
+                  <div className="text-sm text-gray-500">Correct</div>
+                  </CardContent>
+                  </Card>
+                  <Card key={`${selectedStudentDetails.attempt_info.attempt_id}-incorrect`}>
+                  <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold text-orange-600">
+                  {selectedStudentDetails.attempt_info.total_questions - selectedStudentDetails.attempt_info.correct_answers}
+                  </div>
+                  <div className="text-sm text-gray-500">Incorrect</div>
+                  </CardContent>
+                  </Card>
+                  <Card key={`${selectedStudentDetails.attempt_info.attempt_id}-points`}>
+                  <CardContent className="p-4 text-center">
+                  <div className="text-2xl font-bold">
+                  {selectedStudentDetails.attempt_info.points_earned}/{selectedStudentDetails.attempt_info.total_points}
+                  </div>
+                  <div className="text-sm text-gray-500">Points</div>
+                  </CardContent>
+                  </Card>
                   </div>
 
                   {/* Questions */}
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold">Question-by-Question Breakdown</h3>
                     {selectedStudentDetails.detailed_answers.map((answer, index) => (
-                      <Card key={`question-${answer.question_id}-${index}`} className="overflow-hidden">
+                    <Card key={`${selectedStudentDetails.attempt_info.attempt_id}-question-${answer.question_id}-${index}`} className="overflow-hidden">
                         <CardContent className="p-4">
                           <div className="flex items-start justify-between mb-3">
                             <h4 className="font-medium">Question {answer.question_number}</h4>

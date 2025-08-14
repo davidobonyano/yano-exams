@@ -5,10 +5,12 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { ExamSession } from '@/types/database-v2'
 import { TeacherWebRTC } from '@/lib/webrtc'
+import { CameraFrameReceiver } from '@/lib/camera-streaming'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MagneticButton } from '@/components/ui/magnetic-button'
 import { VideoStream } from '@/components/ui/video-stream'
 import TeacherVideoDisplay from './TeacherVideoDisplay'
+import StudentFrameDisplay from './StudentFrameDisplay'
 import { 
   X, 
   Camera, 
@@ -31,6 +33,7 @@ interface CameraMonitorProps {
 interface StudentCameraFeed {
   id: string
   student_id: string
+  student_name_id?: string
   full_name: string
   camera_enabled: boolean
   last_seen: string
@@ -44,6 +47,8 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null)
   const [soundEnabled, setSoundEnabled] = useState(false)
   const webrtcRef = useRef<TeacherWebRTC | null>(null)
+  const frameReceiverRef = useRef<CameraFrameReceiver | null>(null)
+  const [studentFrames, setStudentFrames] = useState<Map<string, string>>(new Map())
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map())
 
   useEffect(() => {
@@ -67,10 +72,22 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
       )
       .subscribe()
 
+    // Initialize frame receiver for video streaming
+    const frameReceiver = new CameraFrameReceiver(session.id)
+    frameReceiver.startReceiving((studentId, frameData) => {
+      console.log('📸 Teacher received frame from student:', studentId)
+      console.log('📊 Current student frames map keys:', Array.from(studentFrames.keys()))
+      setStudentFrames(prev => new Map(prev.set(studentId, frameData)))
+    })
+    frameReceiverRef.current = frameReceiver
+
     return () => {
       subscription.unsubscribe()
       if (webrtcRef.current) {
         webrtcRef.current.destroy()
+      }
+      if (frameReceiverRef.current) {
+        frameReceiverRef.current.stopReceiving()
       }
     }
   }, [session.id])
@@ -152,10 +169,16 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
       if (error) throw error
 
       console.log('Camera monitor students data:', studentsData)
+      console.log('📊 Students mapping:', studentsData?.map(s => ({
+        attempt_student_id: s.student_id,
+        db_student_id: s.students.student_id,
+        name: s.students.full_name
+      })))
 
       const studentFeeds: StudentCameraFeed[] = studentsData?.map(student => ({
         id: student.id,
-        student_id: student.students.student_id,
+        student_id: student.student_id, // Use the actual student_id from student_exam_attempts
+        student_name_id: student.students.student_id, // Keep the display name ID separate
         full_name: student.students.full_name,
         camera_enabled: student.camera_enabled || false,
         last_seen: student.last_activity_at || student.updated_at,
@@ -268,7 +291,7 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                 </div>
               </CardHeader>
 
-              <CardContent className="p-6">
+              <CardContent className="p-6 max-h-[80vh] overflow-y-auto">
                 {selectedStudent ? (
                   // Full-screen view of selected student
                   <div className="space-y-4">
@@ -298,41 +321,12 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                             </div>
                           </div>
                           
-                          <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-xl overflow-hidden aspect-video flex items-center justify-center relative">
-                          {student.camera_enabled ? (
-                          <div className="text-white text-center">
-                          <div className="relative mb-4">
-                            <Camera className="w-20 h-20 mx-auto opacity-80" />
-                            <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full animate-pulse flex items-center justify-center">
-                                <div className="w-3 h-3 bg-white rounded-full"></div>
-                                </div>
-                            </div>
-                          <p className="text-xl font-bold">Camera Active</p>
-                          <p className="text-sm opacity-75 mb-3">
-                          Student is being monitored
-                          </p>
-                          <div className="bg-green-600/30 px-3 py-2 rounded-lg border border-green-500/50">
-                            <p className="text-sm font-medium">✓ Monitoring Active</p>
-                          <p className="text-xs opacity-75 mt-1">Real-time status tracking</p>
-                          </div>
-                          </div>
-                          ) : (
-                          <div className="text-gray-400 text-center">
-                          <div className="relative mb-4">
-                          <CameraOff className="w-20 h-20 mx-auto opacity-50" />
-                            <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
-                                <X className="w-3 h-3 text-white" />
-                                </div>
-                            </div>
-                          <p className="text-xl font-bold">Camera Disabled</p>
-                          <p className="text-sm mb-3">Student has not enabled camera</p>
-                          <div className="bg-red-600/30 px-3 py-2 rounded-lg border border-red-500/50">
-                            <p className="text-sm font-medium">✗ No Monitoring</p>
-                          <p className="text-xs opacity-75 mt-1">Camera access required</p>
-                          </div>
-                          </div>
-                          )}
-                          </div>
+                          <StudentFrameDisplay
+                            studentId={student.student_name_id || student.student_id}
+                            studentName={student.full_name}
+                            frameData={studentFrames.get(student.student_id)}
+                            className="w-full h-full"
+                          />
 
                           {student.violations.length > 0 && (
                             <div className="bg-red-50 border border-red-200 rounded-xl p-4">
@@ -402,56 +396,23 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                           className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
                           onClick={() => toggleFullscreen(student.id)}
                         >
-                          <div className="aspect-video bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center relative overflow-hidden">
-                          {student.camera_enabled ? (
-                          <div className="text-white text-center">
-                          <div className="relative mb-2">
-                            <Camera className="w-8 h-8 mx-auto opacity-75" />
-                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                            </div>
-                              <p className="text-xs font-medium">Active</p>
-                            <div className="mt-1 px-2 py-1 bg-green-600/20 rounded text-xs">
-                            Monitoring
-                          </div>
-                          </div>
-                          ) : (
-                          <div className="text-gray-400 text-center">
-                            <div className="relative mb-2">
-                                <CameraOff className="w-8 h-8 mx-auto opacity-50" />
-                              <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></div>
-                          </div>
-                          <p className="text-xs">Off</p>
-                            <div className="mt-1 px-2 py-1 bg-red-600/20 rounded text-xs">
-                                No Access
-                              </div>
-                            </div>
-                          )}
+                        <div className="relative">
+                        <StudentFrameDisplay
+                          studentId={student.student_name_id || student.student_id}
+                          studentName={student.full_name}
+                            frameData={studentFrames.get(student.student_id)}
+                         />
                           
-                          {/* Status indicator */}
-                          <div className="absolute top-1 left-1">
-                            <div className={`px-1 py-0.5 rounded text-xs font-bold ${
-                              student.camera_enabled 
-                                ? 'bg-green-600 text-white' 
-                              : 'bg-red-600 text-white'
-                            }`}>
-                                 {student.camera_enabled ? 'ACTIVE' : 'OFF'}
-                               </div>
-                             </div>
-                             
-                             <div className="absolute top-2 right-2">
-                               <Eye className="w-4 h-4 text-white opacity-50" />
-                             </div>
-                            
-                            {student.violations.length > 0 && (
-                              <div className="absolute top-2 left-2">
-                                <div className="bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">
-                                  {student.violations.length}
-                                </div>
-                              </div>
+                        {student.violations.length > 0 && (
+                        <div className="absolute top-2 left-2">
+                        <div className="bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs">
+                            {student.violations.length}
+                            </div>
+                            </div>
                             )}
                           </div>
-                          
-                          <div className="p-3">
+                        
+                           <div className="p-3">
                             <h4 className="font-medium text-gray-900 truncate">{student.full_name}</h4>
                             <p className="text-xs text-gray-500">ID: {student.student_id}</p>
                             <div className="flex items-center justify-between mt-2">

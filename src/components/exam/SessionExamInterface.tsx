@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { calculateAndSaveScore, validateAndMarkAnswers } from '@/lib/auto-scoring'
 import { AnimatedBackground } from '@/components/ui/animated-background'
 import { VideoStream } from '@/components/ui/video-stream'
-import { Clock, AlertTriangle, Wifi, WifiOff, BookOpen, CheckCircle, Circle, ArrowLeft, ArrowRight, Send, Eye, EyeOff, Timer, Target, Zap, Camera } from 'lucide-react'
+import { Clock, AlertTriangle, Wifi, WifiOff, BookOpen, CheckCircle, Circle, ArrowLeft, ArrowRight, Send, Eye, EyeOff, Timer, Target, Zap, Camera, BarChart3, ChevronLeft, ChevronRight, RotateCcw, Flag } from 'lucide-react'
 import { useCheatingDetection } from '@/hooks/useCheatingDetection'
 import PersistentExamTimer from './PersistentExamTimer'
 import SessionQuestionDisplay from './SessionQuestionDisplay'
@@ -24,6 +24,7 @@ import CameraPreview from './CameraPreview'
 import SubmitConfirmationModal from './SubmitConfirmationModal'
 import StudentWarningDisplay from './StudentWarningDisplay'
 import { StudentWebRTC } from '@/lib/webrtc'
+import { CameraFrameStreaming } from '@/lib/camera-streaming'
 import toast from 'react-hot-toast'
 
 interface SessionExamInterfaceProps {
@@ -53,13 +54,21 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
   const [showCameraAccess, setShowCameraAccess] = useState(false)
   const [webrtcConnection, setWebrtcConnection] = useState<StudentWebRTC | null>(null)
+  const [frameStreaming, setFrameStreaming] = useState<CameraFrameStreaming | null>(null)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
   const [examCompleted, setExamCompleted] = useState(false)
+  const [examInitialized, setExamInitialized] = useState(false)
+  const [cameraAccessDisabled, setCameraAccessDisabled] = useState(false)
   const [visitedQuestions, setVisitedQuestions] = useState<Set<number>>(new Set([0]))
 
   const warningShown = useRef(false)
   const cameraPromptShown = useRef(false)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // Store refs for cleanup to avoid dependency issues
+  const cameraStreamRef = useRef<MediaStream | null>(null)
+  const webrtcConnectionRef = useRef<StudentWebRTC | null>(null)
+  const frameStreamingRef = useRef<CameraFrameStreaming | null>(null)
   
   // Enhanced cheating detection
   const cheatingDetection = useCheatingDetection({
@@ -99,31 +108,71 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     // Update camera status in database for teacher monitoring
     if (session) {
       try {
-        // If we have an attempt, update it
-        if (attempt) {
-          await supabase
+        // If we have an attempt with valid ID, update it
+        if (attempt && attempt.id) {
+          console.log('Updating camera status for attempt:', attempt.id)
+          const { error: updateError } = await supabase
             .from('student_exam_attempts')
             .update({ 
               camera_enabled: true,
               last_activity_at: new Date().toISOString()
             })
             .eq('id', attempt.id)
+          
+          if (updateError) {
+            console.error('Failed to update camera status:', updateError)
+          } else {
+            console.log('Camera status updated successfully')
+          }
         } else {
           // If no attempt yet, we'll update it later when exam starts
-          console.log('Camera granted, will update attempt status when exam starts')
+          console.log('Camera granted, but no valid attempt ID yet. Will update when exam starts.')
+          console.log('Current attempt:', attempt)
         }
 
-        // Camera monitoring enabled - status tracking only
+        // Camera monitoring enabled - start frame streaming
         if (session.session.camera_monitoring_enabled) {
-          console.log('📹 Camera monitoring enabled - status tracking active')
+          console.log('📹 Camera monitoring enabled - starting frame streaming')
           
-          // For now, we'll focus on stable camera preview and status monitoring
-          // WebRTC streaming is disabled to prevent track conflicts and video issues
-          console.log('💡 Camera status will be tracked in database for teacher dashboard')
-          toast.success('Camera monitoring active')
+          // Create a video element directly from the stream instead of waiting for DOM
+          const videoElement = document.createElement('video')
+          videoElement.srcObject = stream
+          videoElement.autoplay = true
+          videoElement.muted = true
+          videoElement.playsInline = true
           
-          // TODO: Re-enable WebRTC streaming once track management is resolved
-          // This prevents "dead tracks" errors and camera going black
+          videoElement.onloadedmetadata = async () => {
+            try {
+              console.log('🎬 Video metadata loaded, starting frame streaming')
+              console.log('Video dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight)
+              console.log('Video ready state:', videoElement.readyState)
+              
+              const frameStream = new CameraFrameStreaming(
+                session.session.id,
+                session.student.id,
+                videoElement
+              )
+              
+              await frameStream.startStreaming()
+              setFrameStreaming(frameStream)
+              
+              console.log('✅ Frame streaming started successfully')
+              toast.success('Camera monitoring with live frames active')
+            } catch (error) {
+              console.error('❌ Error starting frame streaming:', error)
+              toast.error('Frame streaming failed to start')
+            }
+          }
+          
+          videoElement.onerror = (error) => {
+            console.error('❌ Video element error:', error)
+            toast.error('Video setup failed')
+          }
+          
+          // Start playing the video
+          videoElement.play().catch((error) => {
+            console.error('❌ Error playing video:', error)
+          })
         }
       } catch (error) {
         console.error('Error updating camera status:', error)
@@ -185,13 +234,16 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     const cameraRequired = session.session.camera_monitoring_enabled === true
     console.log('Camera required:', cameraRequired, 'Camera stream:', !!cameraStream, 'Prompt shown:', cameraPromptShown.current)
     
-    if (cameraRequired && !cameraStream && !cameraPromptShown.current) {
+    if (cameraRequired && !cameraStream && !cameraPromptShown.current && !examCompleted && examInitialized && !cameraAccessDisabled) {
       console.log('Showing camera access prompt after exam initialization')
       setCameraAccessRequired(true)
       setShowCameraAccess(true)
       cameraPromptShown.current = true
+    } else if (examCompleted && showCameraAccess) {
+      console.log('Exam completed - hiding camera access prompt')
+      setShowCameraAccess(false)
     }
-  }, [session, sessionId, examId, cameraStream])
+  }, [session, sessionId, examId, cameraStream, examCompleted, showCameraAccess, examInitialized, cameraAccessDisabled])
 
   // Enhanced cheating detection is now handled by the useCheatingDetection hook
   // Additional activity tracking when exam is active
@@ -223,12 +275,12 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
   useEffect(() => {
     const handleBeforeUnload = () => {
       console.log('Page unloading - stopping camera')
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop())
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => track.stop())
       }
-      if (webrtcConnection) {
+      if (webrtcConnectionRef.current) {
         try {
-          webrtcConnection.destroy()
+          webrtcConnectionRef.current.destroy()
         } catch (error) {
           console.log('Page unload WebRTC cleanup error:', error)
         }
@@ -240,32 +292,51 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     return () => {
       window.removeEventListener('beforeunload', handleBeforeUnload)
     }
-  }, [cameraStream, webrtcConnection])
+  }, []) // No dependencies needed since we use refs
 
-  // Cleanup camera and WebRTC on component unmount
+  // Update refs when state changes
+  useEffect(() => {
+    cameraStreamRef.current = cameraStream
+  }, [cameraStream])
+
+  useEffect(() => {
+    webrtcConnectionRef.current = webrtcConnection
+  }, [webrtcConnection])
+
+  useEffect(() => {
+    frameStreamingRef.current = frameStreaming
+  }, [frameStreaming])
+
+  // Cleanup camera and WebRTC on component unmount only
   useEffect(() => {
     return () => {
       console.log('Component unmounting - cleaning up camera and WebRTC')
       
       // Stop camera stream
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => {
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => {
           track.stop()
           console.log('Unmount: Stopped track:', track.kind)
         })
       }
       
       // Cleanup WebRTC connection
-      if (webrtcConnection) {
+      if (webrtcConnectionRef.current) {
         try {
-          webrtcConnection.destroy()
+          webrtcConnectionRef.current.destroy()
           console.log('Unmount: Disconnected WebRTC')
         } catch (error) {
           console.log('Unmount: WebRTC cleanup error (non-critical):', error)
         }
       }
+      
+      // Cleanup frame streaming
+      if (frameStreamingRef.current) {
+        console.log('Unmount: Stopping frame streaming')
+        frameStreamingRef.current.stopStreaming()
+      }
     }
-  }, [cameraStream, webrtcConnection])
+  }, []) // No dependencies - only run on mount/unmount
 
   // Cheating logging is now handled by the useCheatingDetection hook
 
@@ -369,6 +440,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       setError(err.message || 'Failed to load exam')
     } finally {
       setLoading(false)
+      setExamInitialized(true)
     }
   }
 
@@ -490,14 +562,34 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         setWebrtcConnection(null)
       }
       
+      // Cleanup frame streaming
+      if (frameStreaming) {
+        console.log('Stopping frame streaming')
+        frameStreaming.stopStreaming()
+        setFrameStreaming(null)
+      }
+      
       // Update camera status in database
-      console.log('Updating camera status to disabled in database')
-      await supabase
-        .from('student_exam_attempts')
-        .update({ camera_enabled: false })
-        .eq('id', attempt.id)
+      if (attempt?.id) {
+        console.log('Updating camera status to disabled in database for attempt:', attempt.id)
+        const { error: cameraUpdateError } = await supabase
+          .from('student_exam_attempts')
+          .update({ camera_enabled: false })
+          .eq('id', attempt.id)
+          
+        if (cameraUpdateError) {
+          console.error('Failed to update camera status:', cameraUpdateError)
+        }
+      } else {
+        console.warn('Cannot update camera status - no valid attempt ID')
+      }
 
       // Update attempt status
+      if (!attempt?.id) {
+        throw new Error('Cannot submit exam - no valid attempt ID')
+      }
+      
+      console.log('Updating attempt status to submitted for attempt:', attempt.id)
       const { error: updateError } = await supabase
         .from('student_exam_attempts')
         .update({
@@ -507,7 +599,10 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         })
         .eq('id', attempt.id)
 
-      if (updateError) throw updateError
+      if (updateError) {
+        console.error('Failed to update attempt status:', updateError)
+        throw updateError
+      }
 
       // First validate and mark all answers as correct/incorrect
       const answersArray = Object.entries(answers).map(([questionId, answer]) => ({
@@ -531,9 +626,11 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         console.error('Failed to calculate exam score:', scoringResult.error)
       }
 
-      // Set exam completed state and hide camera access
+      // Set exam completed state and permanently disable camera access
       setExamCompleted(true)
       setShowCameraAccess(false)
+      setExamInitialized(false) // Reset initialization flag
+      setCameraAccessDisabled(true) // Permanently disable camera access
       
       // After showing success state, redirect after delay
       setTimeout(() => {
@@ -815,11 +912,12 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
   const timeRemaining = Math.max(0, (attempt?.time_remaining || 0))
   const totalTime = session.exam.duration_minutes * 60
   const timeProgress = ((totalTime - timeRemaining) / totalTime) * 100
+  const showResults = session?.session?.show_results_after_submit || false
 
   // Debug render state (removed for cleaner logs)
 
-  // Show camera access prompt if needed (but not if exam is completed)
-  if (showCameraAccess && session && !examCompleted) {
+  // Show camera access prompt if needed (but not if exam is completed or submitted)
+  if (showCameraAccess && session && !examCompleted && !showResults) {
     return (
       <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/80">
         <div className="min-h-screen flex items-center justify-center p-4">
@@ -1126,8 +1224,8 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                   <div className="p-6">
                     <div className="mb-4">
                       <h3 className="font-bold mb-2 flex items-center space-x-2">
-                        <Eye className="w-5 h-5 text-blue-500" />
-                        <span>Question Navigator</span>
+                      <BarChart3 className="w-5 h-5 text-blue-500" />
+                      <span>Question Navigator</span>
                       </h3>
                       <div className="text-xs text-gray-600 space-y-1">
                         <div className="flex items-center space-x-2">
@@ -1218,31 +1316,33 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                   
                   <div className="grid grid-cols-2 gap-3">
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        const unanswered = questions.findIndex((q, i) => !answers[q.id] && i > currentQuestionIndex)
-                        if (unanswered !== -1) {
-                          setCurrentQuestionIndex(unanswered)
-                          setVisitedQuestions(prev => new Set(prev).add(unanswered))
-                        }
-                      }}
-                      className="text-xs"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                    const unanswered = questions.findIndex((q, i) => !answers[q.id] && i > currentQuestionIndex)
+                    if (unanswered !== -1) {
+                    setCurrentQuestionIndex(unanswered)
+                    setVisitedQuestions(prev => new Set(prev).add(unanswered))
+                    }
+                    }}
+                    className="text-xs flex items-center gap-1"
                     >
+                    <Target className="w-3 h-3" />
                       Next Unanswered
                     </Button>
                     
                     <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setCurrentQuestionIndex(questions.length - 1)
-                        setVisitedQuestions(prev => new Set(prev).add(questions.length - 1))
-                      }}
-                      className="text-xs"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                    setCurrentQuestionIndex(questions.length - 1)
+                      setVisitedQuestions(prev => new Set(prev).add(questions.length - 1))
+                    }}
+                      className="text-xs flex items-center gap-1"
                     >
-                      Go to Last
-                    </Button>
+                      <Flag className="w-3 h-3" />
+                       Go to Last
+                     </Button>
                   </div>
                 </div>
               </Card>

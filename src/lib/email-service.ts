@@ -1,9 +1,17 @@
 // Email service for automated result delivery
-import { Resend } from 'resend';
+import nodemailer from 'nodemailer';
 import { supabase } from './supabase';
 
-// Initialize Resend (you'll need to add RESEND_API_KEY to your .env file)
-const resend = new Resend(process.env.RESEND_API_KEY);
+// Initialize nodemailer transporter
+const transporter = nodemailer.createTransporter({
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT || '587'),
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
 interface EmailTemplate {
   subject_template: string;
@@ -184,19 +192,21 @@ export async function processEmail(emailId: string): Promise<boolean> {
       body = processTemplate(template.body_template, emailData);
     }
     
-    // Send email using Resend
-    const { data: emailResult, error: sendError } = await resend.emails.send({
-      from: 'Yano Exam System <noreply@yourdomain.com>', // Update with your domain
-      to: [emailQueue.recipient_email],
-      subject: subject,
-      html: body,
-    });
-    
-    if (sendError) {
+    // Send email using nodemailer
+    try {
+      const emailResult = await transporter.sendMail({
+        from: process.env.SMTP_FROM || 'Yano Exam System <noreply@yourdomain.com>',
+        to: emailQueue.recipient_email,
+        subject: subject,
+        html: body,
+      });
+      
+      console.log('Email sent successfully:', emailResult.messageId);
+    } catch (sendError) {
       console.error('Failed to send email:', sendError);
       await supabase.rpc('mark_email_failed', {
         p_email_id: emailId,
-        p_error_message: sendError.message
+        p_error_message: sendError instanceof Error ? sendError.message : 'Unknown error'
       });
       return false;
     }
@@ -206,7 +216,6 @@ export async function processEmail(emailId: string): Promise<boolean> {
       p_email_id: emailId
     });
     
-    console.log('Email sent successfully:', emailResult);
     return true;
     
   } catch (error) {

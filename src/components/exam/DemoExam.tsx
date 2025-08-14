@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 import { ModernBackground } from '@/components/ui/modern-background'
 import { GradientText } from '@/components/ui/text-effects'
 import { 
@@ -17,7 +19,14 @@ import {
   Target,
   Zap,
   BookOpen,
-  Home
+  Home,
+  Timer,
+  Camera,
+  Wifi,
+  WifiOff,
+  ChevronLeft,
+  ChevronRight,
+  BarChart3
 } from 'lucide-react'
 
 interface DemoQuestion {
@@ -371,182 +380,324 @@ export default function DemoExam({ onExit }: DemoExamProps) {
     )
   }
 
+  const progressPercentage = (answeredCount / totalQuestions) * 100
+
   return (
-    <ModernBackground variant="default">
-      <div className="min-h-screen p-4">
-        <div className="max-w-4xl mx-auto">
-          {/* Header */}
-          <motion.div
-            initial={{ opacity: 0, y: -30 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="bg-white rounded-xl shadow-lg p-6 mb-6"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900 mb-1">
-                  <GradientText 
-                    text="Demo Exam"
-                    gradient="from-blue-600 via-purple-600 to-cyan-600"
-                  />
-                </h1>
-                <p className="text-gray-600">
-                  Question {currentQuestionIndex + 1} of {totalQuestions}
-                </p>
-              </div>
-              
-              <div className="flex items-center space-x-6">
-                <div className="text-center">
-                  <div className="text-2xl font-mono font-bold text-blue-600">
-                    {formatTime(timeRemaining)}
-                  </div>
-                  <div className="text-sm text-gray-500">Time Left</div>
-                </div>
-                
-                <Button
-                  onClick={onExit}
-                  variant="outline"
-                  size="sm"
-                >
-                  <Home className="w-4 h-4 mr-2" />
-                  Exit Demo
-                </Button>
-              </div>
-            </div>
-            
-            {/* Progress Bar */}
-            <div className="mt-4">
-              <div className="flex justify-between text-sm text-gray-600 mb-2">
-                <span>Progress</span>
-                <span>{answeredCount}/{totalQuestions} answered</span>
-              </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
-                <div 
-                  className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${(answeredCount / totalQuestions) * 100}%` }}
-                />
-              </div>
-            </div>
-          </motion.div>
+    <div className="relative min-h-screen overflow-hidden">
+      {/* Animated Background */}
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30">
+        <div className="absolute inset-0" 
+             style={{
+               backgroundImage: 'radial-gradient(circle at 25% 25%, rgba(99, 102, 241, 0.1) 0%, transparent 50%), radial-gradient(circle at 75% 75%, rgba(236, 72, 153, 0.1) 0%, transparent 50%)'
+             }}
+        />
+      </div>
 
-          {/* Question Card */}
-          <motion.div
-            key={currentQuestionIndex}
-            initial={{ opacity: 0, x: 30 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -30 }}
-            className="bg-white rounded-xl shadow-lg p-8 mb-6"
-          >
-            <div className="mb-6">
-              <div className="flex items-center space-x-3 mb-4">
-                <div className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm font-medium">
-                  Question {currentQuestionIndex + 1}
-                </div>
-                <div className="text-sm text-gray-500">
-                  {currentQuestion.type === 'multiple_choice' ? 'Multiple Choice' : 'True/False'}
-                </div>
-              </div>
-              
-              <h2 className="text-xl font-semibold text-gray-900 mb-6">
-                {currentQuestion.question}
-              </h2>
-
-              <div className="space-y-3">
-                {Object.entries(currentQuestion.options).map(([key, value]) => (
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -30 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="relative z-20 bg-white/90 backdrop-blur-lg border-b shadow-sm"
+      >
+        <div className="max-w-7xl mx-auto px-4 py-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-xl font-bold text-foreground">Demo Mathematics Exam</h1>
+              <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                <span>Question {currentQuestionIndex + 1} of {totalQuestions}</span>
+                <Badge variant="outline" className="bg-white/50">
+                  Session: DEMO-EXAM
+                </Badge>
+                <div className="flex items-center space-x-1">
                   <motion.div
-                    key={key}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className={`p-4 border-2 rounded-xl cursor-pointer transition-all ${
-                      answers[currentQuestion.id] === key
-                        ? 'border-blue-500 bg-blue-50'
-                        : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50'
-                    }`}
-                    onClick={() => handleAnswer(key)}
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ duration: 2, repeat: Infinity }}
                   >
-                    <div className="flex items-center space-x-4">
-                      <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
-                        answers[currentQuestion.id] === key
-                          ? 'border-blue-500 bg-blue-500'
-                          : 'border-gray-300'
-                      }`}>
-                        {answers[currentQuestion.id] === key && (
-                          <CheckCircle className="w-4 h-4 text-white" />
-                        )}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-3">
-                          <span className="font-medium text-gray-700">{key}.</span>
-                          <span className="text-gray-900">{value}</span>
-                        </div>
-                      </div>
-                    </div>
+                    <Wifi className="w-3 h-3 text-green-500" />
                   </motion.div>
-                ))}
+                  <span className="text-green-600">Demo Mode</span>
+                </div>
               </div>
             </div>
-          </motion.div>
 
-          {/* Navigation */}
-          <div className="bg-white rounded-xl shadow-lg p-6">
-            <div className="flex items-center justify-between">
-              <Button
-                onClick={handlePrevious}
-                disabled={currentQuestionIndex === 0}
-                variant="outline"
-              >
-                <ArrowLeft className="w-4 h-4 mr-2" />
-                Previous
-              </Button>
-
-              <div className="text-sm text-gray-600">
-                {answeredCount} of {totalQuestions} answered
+            {/* Timer and Demo Status */}
+            <div className="flex items-center space-x-4">
+              {/* Demo Camera Indicator */}
+              <div className="text-center p-4 border rounded-lg bg-blue-50">
+                <Camera className="w-4 h-4 mx-auto text-blue-500 mb-1" />
+                <div className="flex items-center justify-center space-x-1">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                  <span className="text-xs font-medium text-blue-700">Demo Mode</span>
+                </div>
+              </div>
+              
+              <div className="text-center p-4 border rounded-lg bg-red-50">
+                <Timer className="w-4 h-4 mx-auto text-red-500 mb-1" />
+                <div className="text-lg font-mono font-bold text-red-600">
+                  {formatTime(timeRemaining)}
+                </div>
+                <div className="text-xs text-red-700">Time Left</div>
               </div>
 
-              {currentQuestionIndex === totalQuestions - 1 ? (
-                <Button
-                  onClick={() => setExamPhase('review')}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  <Target className="w-4 h-4 mr-2" />
-                  Review & Submit
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleNext}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  Next
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              )}
+              <Button
+                onClick={onExit}
+                variant="outline"
+                size="sm"
+              >
+                <Home className="w-4 h-4 mr-2" />
+                Exit Demo
+              </Button>
             </div>
           </div>
 
-          {/* Question Overview */}
-          <div className="mt-6 bg-white rounded-xl shadow-lg p-6">
-            <h3 className="font-semibold text-gray-900 mb-4">Question Overview</h3>
-            <div className="grid grid-cols-5 gap-3">
-              {DEMO_QUESTIONS.map((question, index) => (
-                <motion.button
-                  key={question.id}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={() => setCurrentQuestionIndex(index)}
-                  className={`w-12 h-12 rounded-lg text-sm font-medium transition-all ${
-                    index === currentQuestionIndex
-                      ? 'bg-blue-600 text-white shadow-lg'
-                      : answers[question.id]
-                      ? 'bg-green-100 text-green-800 border-2 border-green-300'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  {index + 1}
-                </motion.button>
-              ))}
+          {/* Progress Bar */}
+          <div className="mt-4 space-y-2">
+            <div className="flex justify-between text-sm text-muted-foreground">
+              <span>
+                {answeredCount} of {totalQuestions} answered
+              </span>
+              <span>
+                {Math.round(progressPercentage)}% complete
+              </span>
             </div>
+            <Progress 
+              value={progressPercentage} 
+              className="h-2"
+            />
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Main Content */}
+      <div className="relative z-10 max-w-7xl mx-auto px-4 py-6">
+        <div className="grid grid-cols-1 xl:grid-cols-4 gap-8">
+          {/* Question Content */}
+          <div className="xl:col-span-3">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentQuestionIndex}
+                initial={{ opacity: 0, x: 50, scale: 0.95 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: -50, scale: 0.95 }}
+                transition={{ duration: 0.4, ease: "easeInOut" }}
+              >
+                <Card className="h-full bg-white/80 backdrop-blur">
+                  <div className="h-2 bg-gradient-to-r from-blue-500 via-purple-500 to-cyan-500 rounded-t-2xl" />
+                  
+                  <div className="p-8">
+                    {/* Question Header */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="mb-8"
+                    >
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center space-x-3">
+                          <Badge variant="secondary" className="bg-gradient-to-r from-blue-100 to-purple-100 text-blue-700 px-4 py-2">
+                            Question {currentQuestionIndex + 1} of {totalQuestions}
+                          </Badge>
+                          <Badge variant="outline" className="text-xs">
+                            {currentQuestion.type === 'multiple_choice' ? 'Multiple Choice' : 'True/False'}
+                          </Badge>
+                        </div>
+                      </div>
+                      
+                      <h2 className="text-2xl font-bold text-gray-900 leading-relaxed">
+                        {currentQuestion.question}
+                      </h2>
+                    </motion.div>
+
+                    {/* Options */}
+                    <motion.div
+                      initial={{ opacity: 0, y: 30 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.1 }}
+                      className="space-y-4"
+                    >
+                      {Object.entries(currentQuestion.options).map(([key, value]) => (
+                        <motion.div
+                          key={key}
+                          whileHover={{ scale: 1.01, x: 8 }}
+                          whileTap={{ scale: 0.99 }}
+                          className={`group relative p-6 border-2 rounded-2xl cursor-pointer transition-all duration-200 ${
+                            answers[currentQuestion.id] === key
+                              ? 'border-blue-500 bg-gradient-to-r from-blue-50 to-purple-50 shadow-lg'
+                              : 'border-gray-200 hover:border-blue-300 hover:bg-blue-50/50 hover:shadow-md'
+                          }`}
+                          onClick={() => handleAnswer(key)}
+                        >
+                          <div className="flex items-center space-x-4">
+                            <div className={`relative w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all ${
+                              answers[currentQuestion.id] === key
+                                ? 'border-blue-500 bg-blue-500 scale-110'
+                                : 'border-gray-300 group-hover:border-blue-400'
+                            }`}>
+                              {answers[currentQuestion.id] === key && (
+                                <motion.div
+                                  initial={{ scale: 0 }}
+                                  animate={{ scale: 1 }}
+                                  transition={{ type: "spring", stiffness: 300 }}
+                                >
+                                  <CheckCircle className="w-4 h-4 text-white" />
+                                </motion.div>
+                              )}
+                            </div>
+                            <div className="flex-1">
+                              <div className="flex items-center space-x-3">
+                                <span className={`font-bold text-lg ${
+                                  answers[currentQuestion.id] === key ? 'text-blue-700' : 'text-gray-700'
+                                }`}>
+                                  {key}.
+                                </span>
+                                <span className={`text-lg ${
+                                  answers[currentQuestion.id] === key ? 'text-blue-900 font-medium' : 'text-gray-900'
+                                }`}>
+                                  {value}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Hover indicator */}
+                          <div className={`absolute right-4 top-1/2 transform -translate-y-1/2 transition-all ${
+                            answers[currentQuestion.id] === key
+                              ? 'opacity-100 text-blue-500'
+                              : 'opacity-0 group-hover:opacity-50 text-gray-400'
+                          }`}>
+                            <ChevronRight className="w-5 h-5" />
+                          </div>
+                        </motion.div>
+                      ))}
+                    </motion.div>
+
+                    {/* Navigation */}
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      transition={{ delay: 0.3 }}
+                      className="mt-12 pt-8 border-t border-gray-200"
+                    >
+                      <div className="flex items-center justify-between">
+                        <Button
+                          onClick={handlePrevious}
+                          disabled={currentQuestionIndex === 0}
+                          variant="outline"
+                          size="lg"
+                          className="px-6"
+                        >
+                          <ChevronLeft className="w-4 h-4 mr-2" />
+                          Previous
+                        </Button>
+
+                        <div className="text-sm text-gray-600 bg-gray-50 px-4 py-2 rounded-lg">
+                          {answeredCount} of {totalQuestions} answered
+                        </div>
+
+                        {currentQuestionIndex === totalQuestions - 1 ? (
+                          <Button
+                            onClick={() => setExamPhase('review')}
+                            className="bg-green-600 hover:bg-green-700 px-6"
+                            size="lg"
+                          >
+                            Review & Submit
+                            <Target className="w-4 h-4 ml-2" />
+                          </Button>
+                        ) : (
+                          <Button
+                            onClick={handleNext}
+                            className="bg-blue-600 hover:bg-blue-700 px-6"
+                            size="lg"
+                          >
+                            Next Question
+                            <ChevronRight className="w-4 h-4 ml-2" />
+                          </Button>
+                        )}
+                      </div>
+                    </motion.div>
+                  </div>
+                </Card>
+              </motion.div>
+            </AnimatePresence>
+          </div>
+
+          {/* Sidebar */}
+          <div className="xl:col-span-1 space-y-6">
+            {/* Question Navigator */}
+            <motion.div
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <Card className="bg-white/80 backdrop-blur">
+                <CardHeader className="pb-4">
+                  <CardTitle className="text-lg flex items-center">
+                    <BarChart3 className="w-5 h-5 mr-2 text-blue-600" />
+                    Question Navigator
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-5 gap-2">
+                    {DEMO_QUESTIONS.map((question, index) => (
+                      <motion.button
+                        key={question.id}
+                        whileHover={{ scale: 1.1 }}
+                        whileTap={{ scale: 0.9 }}
+                        onClick={() => setCurrentQuestionIndex(index)}
+                        className={`relative w-10 h-10 rounded-lg text-sm font-bold transition-all ${
+                          index === currentQuestionIndex
+                            ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg scale-110'
+                            : answers[question.id]
+                            ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-800 border-2 border-green-300'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:scale-105'
+                        }`}
+                      >
+                        {index + 1}
+                        {answers[question.id] && index !== currentQuestionIndex && (
+                          <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full flex items-center justify-center">
+                            <CheckCircle className="w-3 h-3 text-white" />
+                          </div>
+                        )}
+                      </motion.button>
+                    ))}
+                  </div>
+                  
+                  <div className="mt-4 pt-4 border-t border-gray-200 space-y-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Answered:</span>
+                      <span className="font-medium text-green-600">{answeredCount}/{totalQuestions}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Remaining:</span>
+                      <span className="font-medium text-orange-600">{totalQuestions - answeredCount}</span>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            {/* Demo Info */}
+            <motion.div
+              initial={{ opacity: 0, x: 30 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 }}
+            >
+              <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-blue-200">
+                <CardContent className="p-6">
+                  <div className="text-center">
+                    <div className="w-12 h-12 bg-blue-500 rounded-full mx-auto mb-3 flex items-center justify-center">
+                      <Zap className="w-6 h-6 text-white" />
+                    </div>
+                    <h3 className="font-bold text-blue-900 mb-2">Demo Mode</h3>
+                    <p className="text-sm text-blue-700 leading-relaxed">
+                      This is a practice exam. Your answers won't be saved, and there's no camera monitoring.
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
           </div>
         </div>
       </div>
-    </ModernBackground>
+    </div>
   )
 }
