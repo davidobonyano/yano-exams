@@ -54,6 +54,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
   const [showCameraAccess, setShowCameraAccess] = useState(false)
   const [webrtcConnection, setWebrtcConnection] = useState<StudentWebRTC | null>(null)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
+  const [examCompleted, setExamCompleted] = useState(false)
   const [visitedQuestions, setVisitedQuestions] = useState<Set<number>>(new Set([0]))
 
   const warningShown = useRef(false)
@@ -112,40 +113,17 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
           console.log('Camera granted, will update attempt status when exam starts')
         }
 
-        // Start WebRTC streaming for teacher dashboard (now that camera is stable)
+        // Camera monitoring enabled - status tracking only
         if (session.session.camera_monitoring_enabled) {
-          console.log('Camera monitoring enabled - starting WebRTC streaming')
+          console.log('📹 Camera monitoring enabled - status tracking active')
           
-          // Wait a bit to ensure camera stream is fully established
-          setTimeout(async () => {
-            try {
-              console.log('Starting WebRTC streaming with stable camera')
-              const webrtc = new StudentWebRTC(
-                session.session.id,
-                session.student.id,
-                session.session.teacher_id
-              )
-              
-              // Create a fresh clone with proper track handling
-              const streamClone = new MediaStream()
-              stream.getVideoTracks().forEach(track => {
-                const clonedTrack = track.clone()
-                streamClone.addTrack(clonedTrack)
-                console.log('🔄 Cloned video track for WebRTC:', clonedTrack.id)
-              })
-              
-              console.log('🚀 Starting WebRTC with cloned stream')
-              await webrtc.startStreaming(streamClone)
-              setWebrtcConnection(webrtc)
-              
-              console.log('WebRTC streaming started successfully')
-              toast.success('Live video streaming to teacher active')
-            } catch (webrtcError) {
-              console.error('WebRTC streaming error:', webrtcError)
-              toast.error('Camera monitoring active, but live streaming unavailable')
-              // Continue with basic monitoring even if WebRTC fails
-            }
-          }, 1000) // 1 second delay to ensure camera is stable
+          // For now, we'll focus on stable camera preview and status monitoring
+          // WebRTC streaming is disabled to prevent track conflicts and video issues
+          console.log('💡 Camera status will be tracked in database for teacher dashboard')
+          toast.success('Camera monitoring active')
+          
+          // TODO: Re-enable WebRTC streaming once track management is resolved
+          // This prevents "dead tracks" errors and camera going black
         }
       } catch (error) {
         console.error('Error updating camera status:', error)
@@ -553,18 +531,24 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         console.error('Failed to calculate exam score:', scoringResult.error)
       }
 
-      // Check if session allows showing results after submission
-      const showResults = session?.session?.show_results_after_submit || false
-      console.log('Show results after submit:', showResults)
-      console.log('Session data:', session)
+      // Set exam completed state and hide camera access
+      setExamCompleted(true)
+      setShowCameraAccess(false)
       
-      if (showResults) {
-        // Redirect to results page if enabled
-        router.push(`/results/${attempt.id}`)
-      } else {
-        // Redirect to dashboard with success message if disabled
-        router.push('/dashboard?examSubmitted=true')
-      }
+      // After showing success state, redirect after delay
+      setTimeout(() => {
+        const showResults = session?.session?.show_results_after_submit || false
+        console.log('Show results after submit:', showResults)
+        console.log('Session data:', session)
+        
+        if (showResults) {
+          // Redirect to results page if enabled
+          router.push(`/results/${attempt.id}`)
+        } else {
+          // Redirect to dashboard with success message if disabled
+          router.push('/dashboard?examSubmitted=true')
+        }
+      }, 3000) // 3 second delay to show success state
     } catch (err: any) {
       console.error('Error submitting exam:', err)
       setError(err.message || 'Failed to submit exam')
@@ -600,6 +584,73 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       }
     }
   }, [webrtcConnection])
+
+  // Show exam completion success state
+  if (examCompleted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50 flex items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-lg w-full"
+        >
+          <Card className="border-0 shadow-2xl bg-white/95 backdrop-blur-lg">
+            <div className="h-3 bg-gradient-to-r from-green-400 via-emerald-500 to-teal-500" />
+            
+            <div className="p-8 text-center">
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ delay: 0.2, type: "spring", stiffness: 200 }}
+                className="mx-auto w-24 h-24 bg-gradient-to-r from-green-100 to-emerald-100 rounded-full flex items-center justify-center mb-6"
+              >
+                <CheckCircle className="w-12 h-12 text-green-600" />
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.4 }}
+              >
+                <h2 className="text-3xl font-bold text-gray-900 mb-3">
+                  Exam Submitted Successfully!
+                </h2>
+                <p className="text-gray-600 mb-6">
+                  Your exam has been submitted and your camera has been turned off automatically.
+                </p>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.6 }}
+                className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6"
+              >
+                <h3 className="font-semibold text-green-900 mb-2 flex items-center justify-center">
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  What happened?
+                </h3>
+                <ul className="text-sm text-green-800 space-y-1">
+                  <li>• Your answers have been saved successfully</li>
+                  <li>• Camera monitoring has ended automatically</li>
+                  <li>• Results will be available when your teacher releases them</li>
+                </ul>
+              </motion.div>
+
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: 0.8 }}
+                className="text-sm text-gray-500"
+              >
+                Redirecting to dashboard in a moment...
+              </motion.div>
+            </div>
+          </Card>
+        </motion.div>
+      </div>
+    )
+  }
 
   if (loading && !showCameraAccess) {
     return (
@@ -767,8 +818,8 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
   // Debug render state (removed for cleaner logs)
 
-  // Show camera access prompt if needed
-  if (showCameraAccess && session) {
+  // Show camera access prompt if needed (but not if exam is completed)
+  if (showCameraAccess && session && !examCompleted) {
     return (
       <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/80">
         <div className="min-h-screen flex items-center justify-center p-4">
@@ -910,7 +961,20 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                 <Timer className="w-4 h-4 mx-auto text-red-500 mb-1" />
                 <PersistentExamTimer
                   attemptId={attempt.id}
-                  initialTimeRemaining={attempt.time_remaining || session.exam.duration_minutes * 60}
+                  initialTimeRemaining={(() => {
+                    const fallbackTime = session.exam.duration_minutes * 60
+                    const attemptTime = attempt.time_remaining || 0
+                    
+                    // If attempt time is suspiciously low (less than 30 seconds), use full exam duration
+                    const timeRemaining = attemptTime < 30 ? fallbackTime : attemptTime
+                    
+                    console.log('🕒 Timer initialized with:', timeRemaining, 'seconds')
+                    console.log('🕒 Attempt time_remaining:', attempt.time_remaining)
+                    console.log('🕒 Exam duration_minutes:', session.exam.duration_minutes)
+                    console.log('🕒 Used fallback time?', attemptTime < 30)
+                    
+                    return timeRemaining
+                  })()}
                   onTimeUp={handleTimeUp}
                 />
               </div>

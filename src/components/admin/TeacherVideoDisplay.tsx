@@ -105,7 +105,19 @@ export default function TeacherVideoDisplay({ stream, studentId, className }: Te
               console.error(`❌ TEACHER: Health check play error for ${studentId}:`, error)
             })
           }
-        }, 2000)
+          
+          // Check if tracks are still live for teacher video
+          const currentStream = video.srcObject as MediaStream
+          if (currentStream) {
+            const tracks = currentStream.getVideoTracks()
+            const deadTracks = tracks.filter(track => track.readyState === 'ended')
+            if (deadTracks.length > 0) {
+              console.warn(`⚠️ TEACHER: Camera tracks ended for ${studentId}, clearing video element`)
+              video.srcObject = null
+              clearInterval(healthCheck)
+            }
+          }
+        }, 3000)
 
         return () => clearInterval(healthCheck)
       }

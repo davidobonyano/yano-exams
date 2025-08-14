@@ -298,48 +298,40 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                             </div>
                           </div>
                           
-                          <div className="bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center relative">
-                            {student.camera_enabled && student.stream ? (
-                              <TeacherVideoDisplay 
-                                stream={student.stream} 
-                                studentId={student.student_id}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : student.camera_enabled ? (
-                              <div className="text-white text-center">
-                                <div className="relative">
-                                  <Camera className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                                  <div className="absolute -top-1 -right-1 w-4 h-4 bg-green-500 rounded-full animate-pulse"></div>
+                          <div className="bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 rounded-xl overflow-hidden aspect-video flex items-center justify-center relative">
+                          {student.camera_enabled ? (
+                          <div className="text-white text-center">
+                          <div className="relative mb-4">
+                            <Camera className="w-20 h-20 mx-auto opacity-80" />
+                            <div className="absolute -top-1 -right-1 w-6 h-6 bg-green-500 rounded-full animate-pulse flex items-center justify-center">
+                                <div className="w-3 h-3 bg-white rounded-full"></div>
                                 </div>
-                                <p className="text-lg font-medium">Camera Active</p>
-                                <p className="text-sm opacity-75">
-                                  Student is being monitored
-                                </p>
-                                <div className="mt-2 text-xs bg-green-600/20 px-2 py-1 rounded">
-                                  Camera Monitoring Active
+                            </div>
+                          <p className="text-xl font-bold">Camera Active</p>
+                          <p className="text-sm opacity-75 mb-3">
+                          Student is being monitored
+                          </p>
+                          <div className="bg-green-600/30 px-3 py-2 rounded-lg border border-green-500/50">
+                            <p className="text-sm font-medium">✓ Monitoring Active</p>
+                          <p className="text-xs opacity-75 mt-1">Real-time status tracking</p>
+                          </div>
+                          </div>
+                          ) : (
+                          <div className="text-gray-400 text-center">
+                          <div className="relative mb-4">
+                          <CameraOff className="w-20 h-20 mx-auto opacity-50" />
+                            <div className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center">
+                                <X className="w-3 h-3 text-white" />
                                 </div>
-                                <div className="mt-2 text-xs text-blue-300">
-                                  {webrtcRef.current ? 'WebRTC Ready - Awaiting Video' : 'Status Monitoring Only'}
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="text-gray-400 text-center">
-                                <CameraOff className="w-16 h-16 mx-auto mb-4" />
-                                <p className="text-lg font-medium">Camera Disabled</p>
-                                <p className="text-sm">Student has not enabled their camera</p>
-                                <div className="mt-2 text-xs bg-red-600/20 px-2 py-1 rounded text-red-300">
-                                  No Feed Available
-                                </div>
-                              </div>
-                            )}
-                            
-                            {/* Live indicator for active streams */}
-                            {student.stream && (
-                              <div className="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded text-xs font-medium flex items-center gap-1">
-                                <div className="w-2 h-2 bg-white rounded-full animate-pulse"></div>
-                                LIVE
-                              </div>
-                            )}
+                            </div>
+                          <p className="text-xl font-bold">Camera Disabled</p>
+                          <p className="text-sm mb-3">Student has not enabled camera</p>
+                          <div className="bg-red-600/30 px-3 py-2 rounded-lg border border-red-500/50">
+                            <p className="text-sm font-medium">✗ No Monitoring</p>
+                          <p className="text-xs opacity-75 mt-1">Camera access required</p>
+                          </div>
+                          </div>
+                          )}
                           </div>
 
                           {student.violations.length > 0 && (
@@ -410,38 +402,45 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                           className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-shadow cursor-pointer"
                           onClick={() => toggleFullscreen(student.id)}
                         >
-                          <div className="aspect-video bg-black flex items-center justify-center relative overflow-hidden">
-                            {student.camera_enabled && student.stream ? (
-                              <TeacherVideoDisplay 
-                                stream={student.stream} 
-                                studentId={student.student_id}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : student.camera_enabled ? (
-                              <div className="text-white text-center">
-                                <div className="relative">
-                                  <Camera className="w-8 h-8 mx-auto mb-2 opacity-75" />
-                                  <div className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                                </div>
-                                <p className="text-xs opacity-75">Active</p>
-                              </div>
-                            ) : (
-                              <div className="text-gray-400 text-center">
-                                <CameraOff className="w-8 h-8 mx-auto mb-2" />
-                                <p className="text-xs">Off</p>
-                              </div>
-                            )}
-                            
-                            {/* Live indicator */}
-                            {student.stream && (
-                              <div className="absolute top-1 left-1 bg-red-500 text-white px-1 py-0.5 rounded text-xs font-bold">
-                                LIVE
-                              </div>
-                            )}
-                            
-                            <div className="absolute top-2 right-2">
-                              <Maximize2 className="w-4 h-4 text-white opacity-50" />
+                          <div className="aspect-video bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center relative overflow-hidden">
+                          {student.camera_enabled ? (
+                          <div className="text-white text-center">
+                          <div className="relative mb-2">
+                            <Camera className="w-8 h-8 mx-auto opacity-75" />
+                            <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
                             </div>
+                              <p className="text-xs font-medium">Active</p>
+                            <div className="mt-1 px-2 py-1 bg-green-600/20 rounded text-xs">
+                            Monitoring
+                          </div>
+                          </div>
+                          ) : (
+                          <div className="text-gray-400 text-center">
+                            <div className="relative mb-2">
+                                <CameraOff className="w-8 h-8 mx-auto opacity-50" />
+                              <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full"></div>
+                          </div>
+                          <p className="text-xs">Off</p>
+                            <div className="mt-1 px-2 py-1 bg-red-600/20 rounded text-xs">
+                                No Access
+                              </div>
+                            </div>
+                          )}
+                          
+                          {/* Status indicator */}
+                          <div className="absolute top-1 left-1">
+                            <div className={`px-1 py-0.5 rounded text-xs font-bold ${
+                              student.camera_enabled 
+                                ? 'bg-green-600 text-white' 
+                              : 'bg-red-600 text-white'
+                            }`}>
+                                 {student.camera_enabled ? 'ACTIVE' : 'OFF'}
+                               </div>
+                             </div>
+                             
+                             <div className="absolute top-2 right-2">
+                               <Eye className="w-4 h-4 text-white opacity-50" />
+                             </div>
                             
                             {student.violations.length > 0 && (
                               <div className="absolute top-2 left-2">

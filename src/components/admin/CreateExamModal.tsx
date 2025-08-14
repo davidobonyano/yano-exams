@@ -123,7 +123,7 @@ export default function CreateExamModal({ onClose, onCreated }: CreateExamModalP
                 </div>
               </CardHeader>
 
-              <CardContent className="p-8">
+              <CardContent className="p-8 max-h-[70vh] overflow-y-auto">
                 <form onSubmit={handleSubmit} className="space-y-8">
                   {/* Exam Title */}
                   <motion.div

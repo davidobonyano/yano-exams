@@ -113,16 +113,19 @@ export default function CameraPreview({ stream }: CameraPreviewProps) {
             })
           }
           
-          // Check if tracks are still live
+          // Check if tracks are still live (but don't spam errors)
           const currentStream = video.srcObject as MediaStream
           if (currentStream) {
             const tracks = currentStream.getVideoTracks()
             const deadTracks = tracks.filter(track => track.readyState === 'ended')
             if (deadTracks.length > 0) {
-              console.error('❌ STUDENT PREVIEW: Found dead tracks:', deadTracks.length)
+              // Only log once per dead track detection, then clear the stream
+              console.warn('⚠️ STUDENT PREVIEW: Camera tracks ended, clearing video element')
+              video.srcObject = null
+              clearInterval(healthCheck) // Stop health check if tracks are dead
             }
           }
-        }, 2000) // Check every 2 seconds
+        }, 3000) // Check every 3 seconds (less frequent)
 
         // Cleanup health check when component unmounts or stream changes
         return () => clearInterval(healthCheck)
