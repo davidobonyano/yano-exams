@@ -1,6 +1,5 @@
 // API endpoint to process pending emails
 import { NextRequest, NextResponse } from 'next/server';
-import { processPendingEmails } from '@/lib/email-service';
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +14,7 @@ export async function POST(request: NextRequest) {
     }
     
     console.log('Processing pending emails...');
+    const { processPendingEmails } = await import('@/lib/email-service');
     const sentCount = await processPendingEmails();
     
     return NextResponse.json({ 
