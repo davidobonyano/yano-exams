@@ -2,6 +2,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { processPendingEmails } from '@/lib/email-service';
 
+export const dynamic = 'force-dynamic'
+
 export async function POST(request: NextRequest) {
   try {
     // You should add authentication here to ensure only authorized users can trigger this
