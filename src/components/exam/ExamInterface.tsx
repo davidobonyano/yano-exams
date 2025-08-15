@@ -129,7 +129,7 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
     }
   }, [])
 
-  const logCheatingAttempt = async (violationType: string, details: any) => {
+  const logCheatingAttempt = async (violationType: string, details: Record<string, unknown>) => {
     if (!attempt) return
 
     try {
@@ -230,9 +230,9 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
         setAnswers(answersMap)
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error initializing exam:', err)
-      setError(err.message || 'Failed to load exam')
+      setError(err instanceof Error ? err.message : 'Failed to load exam')
     } finally {
       setLoading(false)
     }
@@ -304,9 +304,9 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
       setAttempt(data)
       setExamStarted(true)
       setShowInstructions(false)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error starting exam:', err)
-      setError(err.message || 'Failed to start exam')
+      setError(err instanceof Error ? err.message : 'Failed to start exam')
     }
   }
 
@@ -389,9 +389,9 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
 
       // Redirect to dashboard instead of results (results are now teacher-controlled)
       router.push('/dashboard?examSubmitted=true')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error submitting exam:', err)
-      setError(err.message || 'Failed to submit exam')
+      setError(err instanceof Error ? err.message : 'Failed to submit exam')
     } finally {
       setSubmitting(false)
     }

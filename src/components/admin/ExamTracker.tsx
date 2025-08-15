@@ -47,7 +47,7 @@ interface StudentAttempt {
   time_remaining: number | null
   warning_count: number
   is_flagged: boolean
-  browser_info: any
+  browser_info: Record<string, unknown> | null
   ip_address: string | null
 }
 
@@ -67,7 +67,7 @@ interface CheatingIncident {
   student_id: string
   student_name: string
   violation_type: string
-  violation_details: any
+  violation_details: Record<string, unknown> | null
   severity: 'low' | 'medium' | 'high' | 'critical'
   detected_at: string
   teacher_action: string | null
@@ -161,7 +161,7 @@ export default function ExamTracker({ session, onClose }: ExamTrackerProps) {
       setCheatingIncidents(
         (cheatingData || []).map(incident => ({
           ...incident,
-          student_name: (incident as any).students?.full_name || 'Unknown Student'
+          student_name: (incident.students as unknown as { full_name: string } | null)?.full_name || 'Unknown Student'
         }))
       )
     } catch (error) {

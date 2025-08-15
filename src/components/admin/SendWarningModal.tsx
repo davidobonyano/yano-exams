@@ -156,7 +156,7 @@ export default function SendWarningModal({
       setUsePreset(true)
     } catch (error) {
       console.error('Error sending warning:', error)
-      toast.error(`Failed to send warning: ${(error as any)?.message || 'Unknown error'}`)
+      toast.error(`Failed to send warning: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setSending(false)
     }
@@ -272,7 +272,7 @@ export default function SendWarningModal({
                     <div className="space-y-4">
                       <div>
                         <Label>Severity Level</Label>
-                        <Select value={severity} onValueChange={(value: any) => setSeverity(value)}>
+                        <Select value={severity} onValueChange={(value: 'low' | 'medium' | 'high' | 'critical') => setSeverity(value)}>
                           <SelectTrigger className="mt-1">
                             <SelectValue />
                           </SelectTrigger>

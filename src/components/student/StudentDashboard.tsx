@@ -277,6 +277,7 @@ export default function StudentDashboard({
                         <h3 className="font-semibold text-gray-800">Join Exam Session</h3>
                         <div className="flex space-x-2">
                           <FloatingInput
+                            label="Session Code"
                             value={sessionCode}
                             onChange={(e) => setSessionCode(e.target.value.toUpperCase())}
                             placeholder="Enter 6-digit code"
@@ -456,7 +457,7 @@ export default function StudentDashboard({
                         <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
                         <div>
                           <div className="font-medium">Quiet Environment</div>
-                          <div className="text-gray-600">Find a quiet place where you won't be interrupted.</div>
+                          <div className="text-gray-600">Find a quiet place where you won&apos;t be interrupted.</div>
                         </div>
                       </div>
                       <div className="flex items-start space-x-3">

@@ -7,14 +7,14 @@ interface CheatingDetectionConfig {
   attemptId: string
   studentId: string
   sessionId: string
-  onViolationDetected?: (violationType: string, details: any) => void
+  onViolationDetected?: (violationType: string, details: Record<string, unknown>) => void
 }
 
 interface ViolationDetails {
   timestamp: number
   userAgent: string
   url: string
-  additionalData?: any
+  additionalData?: Record<string, unknown>
 }
 
 export function useCheatingDetection({
@@ -32,7 +32,7 @@ export function useCheatingDetection({
   // Log cheating incident to database
   const logCheatingIncident = useCallback(async (
     violationType: string, 
-    violationDetails: any, 
+    violationDetails: Record<string, unknown>, 
     severity: 'low' | 'medium' | 'high' | 'critical' = 'low'
   ) => {
     try {
@@ -260,11 +260,11 @@ export function useCheatingDetection({
 }
 
 // Throttle utility function
-function throttle<T extends (...args: any[]) => any>(func: T, limit: number): T {
+function throttle<T extends (...args: unknown[]) => unknown>(func: T, limit: number): T {
   let inThrottle: boolean
-  return ((...args: any[]) => {
+  return ((...args: unknown[]) => {
     if (!inThrottle) {
-      func.apply(null, args)
+      func(...args)
       inThrottle = true
       setTimeout(() => inThrottle = false, limit)
     }

@@ -60,7 +60,7 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedSession, setSelectedSession] = useState<string>('')
-  const [sessions, setSessions] = useState<any[]>([])
+  const [sessions, setSessions] = useState<Array<{ id: string; session_code: string; session_name: string; allow_student_results_view: boolean }>>([])
   const [emailAddress, setEmailAddress] = useState('')
   const [emailingResults, setEmailingResults] = useState<Set<string>>(new Set())
   const [selectedStudentDetails, setSelectedStudentDetails] = useState<DetailedStudentResult | null>(null)
@@ -244,7 +244,7 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
     }
     acc[sessionKey].results.push(result)
     return acc
-  }, {} as Record<string, any>)
+  }, {} as Record<string, { session: unknown; exam: unknown; results: ExamResult[]; sessionId: string }>)
 
   if (loading) {
     return (
@@ -296,11 +296,11 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
                   <div>
                     <CardTitle className="flex items-center space-x-2">
                       <Users className="w-5 h-5" />
-                      <span>{group.session.session_name}</span>
-                      <Badge variant="outline">{group.session.session_code}</Badge>
+                      <span>{(group.session as { session_name: string }).session_name}</span>
+                      <Badge variant="outline">{(group.session as { session_code: string }).session_code}</Badge>
                     </CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">
-                      {group.exam.title} • {group.results.length} student(s)
+                      {(group.exam as { title: string }).title} • {group.results.length} student(s)
                     </p>
                   </div>
                   

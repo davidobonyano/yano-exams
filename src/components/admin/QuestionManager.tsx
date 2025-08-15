@@ -220,7 +220,7 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
       setShowBulkImport(false)
     } catch (error) {
       console.error('Error importing questions:', error)
-      toast.error('Failed to import questions: ' + (error as any).message)
+      toast.error('Failed to import questions: ' + (error instanceof Error ? error.message : 'Unknown error'))
     }
   }
 
@@ -266,7 +266,7 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
       
       const lines = block.split('\n').map(line => line.trim()).filter(Boolean)
       let question_text = ''
-      let options: { [key: string]: string } = {}
+      const options: { [key: string]: string } = {}
       let correct_answer = ''
       let points = 1
       let explanation = ''
@@ -501,7 +501,7 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Question Type</Label>
-                        <Select value={questionType} onValueChange={(value: any) => {
+                        <Select value={questionType} onValueChange={(value: 'multiple_choice' | 'true_false' | 'short_answer') => {
                           setQuestionType(value)
                           setCorrectAnswer('') // Reset correct answer when type changes
                           if (value === 'multiple_choice') {

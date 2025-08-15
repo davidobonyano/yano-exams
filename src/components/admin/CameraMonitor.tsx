@@ -134,7 +134,7 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
       }
       
       // Handle connection status
-      (webrtc as any).onConnectionStateChange = (studentId: string, state: string) => {
+      (webrtc as TeacherWebRTC & { onConnectionStateChange?: (studentId: string, state: string) => void }).onConnectionStateChange = (studentId: string, state: string) => {
         console.log(`Student ${studentId} connection state:`, state)
         if (state === 'connected') {
           console.log(`Live video established with student ${studentId}`)

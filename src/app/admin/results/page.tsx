@@ -1,7 +1,10 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { useEffect, useState } from 'react'
-import { useAuth } from '@/context/AuthContext'
+import { User } from '@supabase/supabase-js'
+import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
 import TeacherResultsManager from '@/components/admin/TeacherResultsManager'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,7 +13,8 @@ import { ArrowLeft, BarChart3, Users, Eye, Mail } from 'lucide-react'
 import Link from 'next/link'
 
 export default function AdminResultsPage() {
-  const { profile, loading } = useAuth()
+  const [user, setUser] = useState<User | null>(null)
+  const [loading, setLoading] = useState(true)
   const router = useRouter()
   const [mounted, setMounted] = useState(false)
 
@@ -19,12 +23,30 @@ export default function AdminResultsPage() {
   }, [])
 
   useEffect(() => {
-    if (!loading && !profile) {
-      router.push('/auth/login')
-    } else if (!loading && profile && (profile as any).role !== 'teacher') {
-      router.push('/dashboard')
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+      setLoading(false)
+    })
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      setUser(session?.user ?? null)
+      if (event === 'SIGNED_OUT') {
+        setLoading(false)
+      }
+    })
+
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/admin')
     }
-  }, [profile, loading, router])
+  }, [user, loading, router])
 
   if (!mounted || loading) {
     return (
@@ -34,7 +56,7 @@ export default function AdminResultsPage() {
     )
   }
 
-  if (!profile || (profile as any).role !== 'teacher') {
+  if (!user) {
     return null
   }
 
@@ -130,7 +152,7 @@ export default function AdminResultsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <TeacherResultsManager teacherId={profile.id} />
+            <TeacherResultsManager teacherId={user.id} />
           </CardContent>
         </Card>
       </div>

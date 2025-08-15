@@ -50,7 +50,7 @@ export default function DeleteSessionModal({
             <CardContent className="p-6">
               <div className="space-y-4">
                 <p className="text-gray-700">
-                  Are you sure you want to delete the session <strong>"{sessionName}"</strong>?
+                  Are you sure you want to delete the session <strong>&quot;{sessionName}&quot;</strong>?
                 </p>
                 
                 <div className="bg-red-50 border border-red-200 rounded-lg p-3">

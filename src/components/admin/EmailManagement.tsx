@@ -247,7 +247,7 @@ export default function EmailManagement() {
                   <div className="flex items-center space-x-2">
                     <Switch
                       checked={session.auto_email_results}
-                      onCheckedChange={(checked) => 
+                      onCheckedChange={(checked: boolean) => 
                         updateSessionEmailSettings(session.id, { auto_email_results: checked })
                       }
                     />
@@ -257,7 +257,7 @@ export default function EmailManagement() {
                   <div className="flex items-center space-x-2">
                     <Switch
                       checked={session.email_to_students}
-                      onCheckedChange={(checked) => 
+                      onCheckedChange={(checked: boolean) =>
                         updateSessionEmailSettings(session.id, { email_to_students: checked })
                       }
                     />
@@ -267,7 +267,7 @@ export default function EmailManagement() {
                   <div className="flex items-center space-x-2">
                     <Switch
                       checked={session.email_to_parents}
-                      onCheckedChange={(checked) => 
+                      onCheckedChange={(checked: boolean) =>
                         updateSessionEmailSettings(session.id, { email_to_parents: checked })
                       }
                     />

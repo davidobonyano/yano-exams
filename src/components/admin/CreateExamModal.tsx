@@ -61,9 +61,9 @@ export default function CreateExamModal({ onClose, onCreated }: CreateExamModalP
       toast.success('Exam created successfully!')
       onCreated()
       onClose()
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error creating exam:', err)
-      const errorMessage = err.message || 'Failed to create exam'
+      const errorMessage = err instanceof Error ? err.message : 'Failed to create exam'
       setError(errorMessage)
       toast.error(errorMessage)
     } finally {

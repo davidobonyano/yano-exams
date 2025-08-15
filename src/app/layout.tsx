@@ -3,7 +3,6 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { SimpleSessionProvider } from '@/context/SimpleSessionContext'
 import { Toaster } from '@/components/ui/toaster'
-import ExamSubmissionSuccess from '@/components/exam/ExamSubmissionSuccess'
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -34,7 +33,6 @@ export default function RootLayout({
           {children}
         </SimpleSessionProvider>
         <Toaster />
-        <ExamSubmissionSuccess />
       </body>
     </html>
   );

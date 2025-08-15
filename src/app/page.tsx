@@ -1,12 +1,14 @@
 'use client'
 
+export const dynamic = 'force-dynamic'
+
 import { motion } from 'framer-motion'
 import { useSession } from '@/context/SimpleSessionContext'
 import StudentPortal from '@/components/student/StudentPortal'
-import SessionDashboard from '@/components/session/SessionDashboard'
+
 
 export default function Home() {
-  const { session, loading } = useSession()
+  const { loading } = useSession()
 
   if (loading) {
     return (

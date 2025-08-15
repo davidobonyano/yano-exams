@@ -50,7 +50,7 @@ export default function EndSessionModal({
             <CardContent className="p-6">
               <div className="space-y-4">
                 <p className="text-gray-700">
-                  Are you sure you want to end the session <strong>"{sessionName}"</strong>?
+                  Are you sure you want to end the session <strong>&quot;{sessionName}&quot;</strong>?
                 </p>
                 
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">

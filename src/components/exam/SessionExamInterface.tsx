@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSession } from '@/context/SimpleSessionContext'
 import { supabase } from '@/lib/supabase'
-import { Question, StudentExamAttempt, StudentAnswer } from '@/types/database-v2'
+import { Question, StudentExamAttempt, StudentAnswer, Exam } from '@/types/database-v2'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -440,9 +440,9 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         setAnswers(answersMap)
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error initializing exam:', err)
-      setError(err.message || 'Failed to load exam')
+      setError(err instanceof Error ? err.message : 'Failed to load exam')
     } finally {
       setLoading(false)
       setExamInitialized(true)
@@ -490,12 +490,12 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       setExamStarted(true)
       setShowInstructions(false)
       console.log('Exam started successfully')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error starting exam:', err)
       console.error('Error type:', typeof err)
       console.error('Error details:', JSON.stringify(err, null, 2))
       console.error('Error constructor:', err?.constructor?.name)
-      setError(err.message || 'Failed to start exam')
+      setError(err instanceof Error ? err.message : 'Failed to start exam')
     }
   }
 
@@ -701,9 +701,9 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
           router.push('/dashboard?examSubmitted=true')
         }
       }, 3000) // 3 second delay to show success state
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error submitting exam:', err)
-      setError(err.message || 'Failed to submit exam')
+      setError(err instanceof Error ? err.message : 'Failed to submit exam')
       throw err // Re-throw to let modal handle the error state
     }
   }
@@ -897,7 +897,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         studentName={session.student.full_name}
         examTitle={session.exam.title} 
         durationMinutes={session.exam.duration_minutes}
-        instructions={(session.exam as any).instructions || 'Please read all questions carefully and answer to the best of your ability.'}
+        instructions={(session.exam as Exam).description || 'Please read all questions carefully and answer to the best of your ability.'}
         cameraRequired={session.session.camera_monitoring_enabled}
         onCameraGranted={handleCameraGranted}
         onContinueToExam={() => {

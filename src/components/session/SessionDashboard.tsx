@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useSession } from '@/context/SimpleSessionContext'
 import { supabase } from '@/lib/supabase'
-import { StudentExamAttempt } from '@/types/database-v2'
+import { StudentExamAttempt, ExamSession, Exam } from '@/types/database-v2'
 import Link from 'next/link'
 
 export default function SessionDashboard() {
@@ -38,7 +38,7 @@ export default function SessionDashboard() {
       }
 
       setAttempt(attemptData || null)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error checking exam attempt:', err)
       setError('Failed to load exam status')
     } finally {
@@ -69,9 +69,9 @@ export default function SessionDashboard() {
       if (error) throw error
 
       setAttempt(data)
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error starting exam:', err)
-      setError(err.message || 'Failed to start exam')
+      setError(err instanceof Error ? err.message : 'Failed to start exam')
     } finally {
       setLoading(false)
     }
@@ -123,8 +123,8 @@ export default function SessionDashboard() {
   const canTake = canTakeExam()
 
   // Check if session is still active
-  const sessionEnded = (session.session as any).ends_at ? new Date((session.session as any).ends_at) < new Date() : false
-  const sessionActive = (session.session as any).status === 'active' && !sessionEnded
+  const sessionEnded = (session.session as ExamSession).ends_at ? new Date((session.session as ExamSession).ends_at) < new Date() : false
+  const sessionActive = (session.session as ExamSession).status === 'active' && !sessionEnded
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -175,7 +175,7 @@ export default function SessionDashboard() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
               <span className="font-medium text-gray-700">Session:</span>
-              <span className="ml-2 text-gray-600">{(session.session as any).session_name}</span>
+              <span className="ml-2 text-gray-600">{(session.session as ExamSession).session_name}</span>
             </div>
             <div>
               <span className="font-medium text-gray-700">Student ID:</span>
@@ -184,21 +184,21 @@ export default function SessionDashboard() {
             <div>
               <span className="font-medium text-gray-700">Starts:</span>
               <span className="ml-2 text-gray-600">
-                {(session.session as any).starts_at ? new Date((session.session as any).starts_at).toLocaleString() : 'N/A'}
+                {(session.session as ExamSession).starts_at ? new Date((session.session as ExamSession).starts_at).toLocaleString() : 'N/A'}
               </span>
             </div>
             <div>
               <span className="font-medium text-gray-700">Ends:</span>
               <span className="ml-2 text-gray-600">
-                {(session.session as any).ends_at ? new Date((session.session as any).ends_at).toLocaleString() : 'N/A'}
+                {(session.session as ExamSession).ends_at ? new Date((session.session as ExamSession).ends_at).toLocaleString() : 'N/A'}
               </span>
             </div>
           </div>
 
-          {session.session.instructions && (
+          {(session.session as ExamSession).instructions && (
             <div className="mt-4 p-3 bg-blue-50 rounded-md">
               <h4 className="text-sm font-medium text-blue-800">Instructions:</h4>
-              <p className="mt-1 text-sm text-blue-700">{session.session.instructions}</p>
+              <p className="mt-1 text-sm text-blue-700">{(session.session as ExamSession).instructions}</p>
             </div>
           )}
         </div>
@@ -212,8 +212,8 @@ export default function SessionDashboard() {
             </span>
           </div>
           
-          {session.exam.description && (
-            <p className="mb-4 text-sm text-gray-600">{session.exam.description}</p>
+          {(session.exam as Exam).description && (
+            <p className="mb-4 text-sm text-gray-600">{(session.exam as Exam).description}</p>
           )}
           
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-500 mb-6">
@@ -221,13 +221,13 @@ export default function SessionDashboard() {
               <span className="font-medium">Duration:</span> {session.exam.duration_minutes} mins
             </div>
             <div>
-              <span className="font-medium">Questions:</span> {session.exam.total_questions}
+              <span className="font-medium">Questions:</span> {(session.exam as Exam).total_questions}
             </div>
             <div>
-              <span className="font-medium">Passing Score:</span> {session.exam.passing_score}%
+              <span className="font-medium">Passing Score:</span> {(session.exam as Exam).passing_score}%
             </div>
             <div>
-              <span className="font-medium">Class:</span> {session.exam.class_level}
+              <span className="font-medium">Class:</span> {(session.exam as Exam).class_level}
             </div>
           </div>
 

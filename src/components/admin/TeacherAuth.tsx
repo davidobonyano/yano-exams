@@ -50,8 +50,8 @@ export default function TeacherAuth() {
           setMessage('Account created successfully! Please check your email to verify your account.')
         }
       }
-    } catch (error: any) {
-      setError(error.message)
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : 'An error occurred')
     } finally {
       setLoading(false)
     }

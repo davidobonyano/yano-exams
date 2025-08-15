@@ -706,7 +706,7 @@ export default function DemoExam({ onExit }: DemoExamProps) {
                     </div>
                     <h3 className="font-bold text-blue-900 mb-2">Demo Mode</h3>
                     <p className="text-sm text-blue-700 leading-relaxed">
-                      This is a practice exam. Your answers won't be saved, and there's no camera monitoring.
+                      This is a practice exam. Your answers won&apos;t be saved, and there&apos;s no camera monitoring.
                     </p>
                   </div>
                 </CardContent>

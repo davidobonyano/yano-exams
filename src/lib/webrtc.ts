@@ -18,7 +18,7 @@ export class StudentWebRTC {
   private sessionId: string
   private studentId: string
   private teacherId: string
-  private channel: any
+  private channel: ReturnType<typeof supabase.channel> | null = null
 
   constructor(sessionId: string, studentId: string, teacherId: string) {
     this.sessionId = sessionId
@@ -155,7 +155,7 @@ export class TeacherWebRTC {
   private remoteStreams: Map<string, MediaStream> = new Map()
   private sessionId: string
   private teacherId: string
-  private channel: any
+  private channel: ReturnType<typeof supabase.channel> | null = null
   
   // Callback for when student stream is received
   onStudentStreamReceived?: (studentId: string, stream: MediaStream) => void
@@ -192,7 +192,7 @@ export class TeacherWebRTC {
         },
         async (payload) => {
           const candidate = payload.new
-          await this.handleIceCandidate(candidate)
+          await this.handleIceCandidate(candidate as { student_id: string; candidate_data?: RTCIceCandidate })
         }
       )
       .subscribe()
@@ -240,7 +240,7 @@ export class TeacherWebRTC {
     this.peerConnections.set(offer.student_id, peerConnection)
   }
 
-  private async handleIceCandidate(candidate: any) {
+  private async handleIceCandidate(candidate: { student_id: string; candidate_data?: RTCIceCandidate }) {
     const peerConnection = this.peerConnections.get(candidate.student_id)
     if (peerConnection && candidate.candidate_data) {
       await peerConnection.addIceCandidate(candidate.candidate_data)

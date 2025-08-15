@@ -78,9 +78,9 @@ export default function ExamResults({ attemptId }: ExamResultsProps) {
         await calculateResults(attemptData, examData)
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading results:', err)
-      setError(err.message || 'Failed to load results')
+      setError(err instanceof Error ? err.message : 'Failed to load results')
     } finally {
       setLoading(false)
     }
@@ -203,9 +203,9 @@ export default function ExamResults({ attemptId }: ExamResultsProps) {
       setResult(resultData)
       await loadQuestionsWithAnswers(exam.id, attempt.id)
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error calculating results:', err)
-      setError(err.message || 'Failed to calculate results')
+      setError(err instanceof Error ? err.message : 'Failed to calculate results')
     }
   }
 

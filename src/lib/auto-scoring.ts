@@ -36,7 +36,7 @@ export interface DetailedAnswer {
   question_text: string
   question_type: string
   question_points: number
-  options?: any
+  options?: Record<string, string>
   correct_answer_key: string
   correct_answer_text: string
   student_answer_key: string
@@ -411,8 +411,8 @@ export async function generateSessionAnalytics(sessionId: string) {
       lowestScore: Math.min(...scores),
       distribution,
       results: results.map(r => ({
-        studentName: r.students?.full_name || 'Unknown',
-        studentId: r.students?.student_id || 'N/A',
+        studentName: (r as { students?: { full_name?: string } }).students?.full_name || 'Unknown',
+        studentId: (r as { students?: { student_id?: string } }).students?.student_id || 'N/A',
         score: r.percentage_score,
         passed: r.passed,
         correctAnswers: r.correct_answers,
@@ -540,9 +540,9 @@ export function exportResultsToCSV(results: ExamResult[], sessionName: string): 
   ]
 
   const rows = results.map(result => [
-    result.students?.student_id || 'N/A',
-    result.students?.full_name || 'Unknown',
-    result.students?.class_level || 'N/A',
+    (result as { students?: { student_id?: string } }).students?.student_id || 'N/A',
+    (result as { students?: { full_name?: string } }).students?.full_name || 'Unknown',
+    (result as { students?: { class_level?: string } }).students?.class_level || 'N/A',
     result.total_questions.toString(),
     result.correct_answers.toString(),
     result.total_points.toString(),

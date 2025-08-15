@@ -86,6 +86,6 @@ export interface CheatingLog {
   attempt_id: string
   user_id: string
   violation_type: string
-  violation_details?: Record<string, any>
+  violation_details?: Record<string, unknown>
   detected_at: string
 }

@@ -116,9 +116,9 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('exam_session', JSON.stringify(sessionContext))
 
       return { error: null }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error joining session:', error)
-      return { error: error.message || 'Failed to join session' }
+      return { error: error instanceof Error ? error.message : 'Failed to join session' }
     } finally {
       setLoading(false)
     }

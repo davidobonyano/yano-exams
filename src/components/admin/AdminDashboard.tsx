@@ -2,26 +2,10 @@
 
 import { useState, useEffect } from 'react'
 import { User } from '@supabase/supabase-js'
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion } from 'framer-motion'
 import { 
-  BookOpen, 
-  Users, 
-  BarChart3, 
-  Plus, 
-  Settings, 
-  Clock, 
-  Award,
-  FileText,
-  Play,
-  Pause,
-  Calendar,
-  GraduationCap,
-  TrendingUp,
-  Eye,
-  LogOut,
   Copy,
   Check,
-  RefreshCw,
   Mail
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'

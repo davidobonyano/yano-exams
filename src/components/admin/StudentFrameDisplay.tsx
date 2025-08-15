@@ -14,7 +14,7 @@ export default function StudentFrameDisplay({ studentId, studentName, frameData,
   const [currentFrame, setCurrentFrame] = useState<string | null>(null)
   const [lastFrameTime, setLastFrameTime] = useState<number>(0)
   const [isConnected, setIsConnected] = useState(false)
-  const timeoutRef = useRef<NodeJS.Timeout>()
+  const timeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
 
   // Update frame when frameData prop changes
   useEffect(() => {
@@ -65,7 +65,7 @@ export default function StudentFrameDisplay({ studentId, studentName, frameData,
 
   // Expose updateFrame method to parent
   useEffect(() => {
-    ;(updateFrame as any).studentId = studentId
+    ;(updateFrame as typeof updateFrame & { studentId: string }).studentId = studentId
   }, [studentId])
 
   const timeAgo = lastFrameTime ? Math.floor((Date.now() - lastFrameTime) / 1000) : 0

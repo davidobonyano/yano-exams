@@ -4,7 +4,7 @@ import { supabase } from './supabase';
 
 // Create Gmail transporter
 const createTransporter = () => {
-  return nodemailer.createTransporter({
+  return nodemailer.createTransport({
     service: 'gmail',
     auth: {
       user: process.env.SCHOOL_GMAIL_USER, // e.g., admin@yourschool.edu
@@ -137,7 +137,7 @@ async function getEmailData(attemptId: string): Promise<EmailData | null> {
     teacher_name: attempt.teacher_name || 'Teacher',
     teacher_email: process.env.SCHOOL_GMAIL_USER || '',
     school_name: process.env.SCHOOL_NAME || 'School',
-    questions: questions?.map((q: any) => ({
+    questions: questions?.map((q: { question_text: string; student_answer_text?: string; correct_answer_text: string; is_correct: boolean; explanation?: string }) => ({
       question_text: q.question_text,
       student_answer: q.student_answer_text || 'Not answered',
       correct_answer: q.correct_answer_text,

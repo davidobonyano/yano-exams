@@ -129,7 +129,7 @@ export interface CheatingLog {
   student_id: string
   session_id: string
   violation_type: string
-  violation_details?: Record<string, any>
+  violation_details?: Record<string, unknown>
   detected_at: string
 }
 

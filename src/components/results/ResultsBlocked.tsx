@@ -99,7 +99,7 @@ export default function ResultsBlocked({
             >
               <h3 className="font-semibold text-blue-900 mb-3 flex items-center">
                 <Lock className="w-4 h-4 mr-2" />
-                Why can't I see my results?
+                Why can&apos;t I see my results?
               </h3>
               <ul className="text-sm text-blue-800 space-y-2">
                 <li className="flex items-start">

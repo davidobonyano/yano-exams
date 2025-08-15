@@ -7,7 +7,7 @@ export class CameraFrameStreaming {
   private context: CanvasRenderingContext2D
   private intervalId: NodeJS.Timeout | null = null
   private isStreaming = false
-  private channel: any = null
+  private channel: ReturnType<typeof supabase.channel> | null = null
 
   constructor(
     private sessionId: string,
@@ -144,7 +144,7 @@ export class CameraFrameStreaming {
 
 // Teacher-side frame receiver
 export class CameraFrameReceiver {
-  private channel: any
+  private channel: ReturnType<typeof supabase.channel> | null = null
   private frameCallbacks = new Map<string, (frameData: string) => void>()
 
   constructor(private sessionId: string) {}

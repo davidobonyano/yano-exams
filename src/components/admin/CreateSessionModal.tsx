@@ -81,9 +81,9 @@ export default function CreateSessionModal({ exam, onClose, onCreated }: CreateS
       } else {
         throw new Error(data.error || 'Failed to create session')
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error creating session:', err)
-      setError(err.message || 'Failed to create session')
+      setError(err instanceof Error ? err.message : 'Failed to create session')
     } finally {
       setLoading(false)
     }

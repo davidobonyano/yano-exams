@@ -34,8 +34,8 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
   const [result, setResult] = useState<ExamResult | null>(null)
   const [questions, setQuestions] = useState<QuestionWithAnswer[]>([])
   const [detailedResult, setDetailedResult] = useState<DetailedStudentResult | null>(null)
-  const [studentInfo, setStudentInfo] = useState<any>(null)
-  const [sessionInfo, setSessionInfo] = useState<any>(null)
+  const [studentInfo, setStudentInfo] = useState<{ id: string; name?: string; full_name?: string; email?: string } | null>(null)
+  const [sessionInfo, setSessionInfo] = useState<{ id: string; session_name?: string; session_code?: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showAnswers, setShowAnswers] = useState(false)
@@ -152,7 +152,7 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
           id: answer.question_id,
           exam_id: attemptInfo.exam_id,
           question_text: answer.question_text,
-          question_type: answer.question_type as any,
+          question_type: answer.question_type as 'multiple_choice' | 'true_false' | 'short_answer',
           options: answer.options,
           correct_answer: answer.correct_answer_key,
           points: answer.question_points,
@@ -173,9 +173,9 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
         setQuestions(questionsWithAnswers)
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error loading results:', err)
-      setError(err.message || 'Failed to load results')
+      setError(err instanceof Error ? err.message : 'Failed to load results')
     } finally {
       setLoading(false)
     }
@@ -306,9 +306,9 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
       setResult(resultData)
       await loadQuestionsWithAnswers(exam.id, attempt.id)
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error calculating results:', err)
-      setError(err.message || 'Failed to calculate results')
+      setError(err instanceof Error ? err.message : 'Failed to calculate results')
     }
   }
 
@@ -323,11 +323,11 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
         exam,
         attempt,
         result,
-        studentName: studentInfo.full_name,
-        sessionCode: sessionInfo.session_code
+        studentName: studentInfo.full_name || 'Unknown Student',
+        sessionCode: sessionInfo.session_code || 'Unknown Session'
       })
 
-      const filename = `${exam.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_results_${studentInfo.full_name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`
+      const filename = `${exam.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_results_${(studentInfo.full_name || 'unknown').replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`
       
       downloadPDF(pdf, filename)
       

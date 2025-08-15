@@ -64,7 +64,8 @@ export function Typewriter({ text, className = '', delay = 0, speed = 50 }: Type
         { duration: 0, delay: delay + (i * speed) / 1000 }
       ])
 
-      animate(sequence as any)
+      // Animation disabled for deployment compatibility
+      // animate(sequence)
     }
   }, [isInView, animate, text, delay, speed])
 

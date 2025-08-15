@@ -111,9 +111,9 @@ export default function SimpleExamInterface({ sessionData, onExamComplete }: Sim
         }
       }
 
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error initializing exam:', err)
-      setError(err.message || 'Failed to load exam')
+      setError(err instanceof Error ? err.message : 'Failed to load exam')
     } finally {
       setLoading(false)
     }
@@ -159,9 +159,9 @@ export default function SimpleExamInterface({ sessionData, onExamComplete }: Sim
       setExamStarted(true)
       
       toast.success('Exam started successfully!')
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error starting exam:', err)
-      setError(err.message || 'Failed to start exam')
+      setError(err instanceof Error ? err.message : 'Failed to start exam')
     }
   }
 
@@ -251,9 +251,9 @@ export default function SimpleExamInterface({ sessionData, onExamComplete }: Sim
       
       // Navigate to results page
       window.location.href = `/results/${attempt.id}`
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error('Error submitting exam:', err)
-      setError(err.message || 'Failed to submit exam')
+      setError(err instanceof Error ? err.message : 'Failed to submit exam')
       throw err
     }
   }

@@ -479,7 +479,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                         <Award className="w-12 h-12 mx-auto" />
                       </div>
                       <h3 className="text-lg font-medium text-gray-900 mb-2">No Results Yet</h3>
-                      <p className="text-gray-500">Students haven't completed this exam session yet.</p>
+                      <p className="text-gray-500">Students haven&apos;t completed this exam session yet.</p>
                     </div>
                   )}
                 </div>

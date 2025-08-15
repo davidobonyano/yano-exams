@@ -3,7 +3,7 @@ import nodemailer from 'nodemailer';
 import { supabase } from './supabase';
 
 // Initialize nodemailer transporter
-const transporter = nodemailer.createTransporter({
+const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
   port: parseInt(process.env.SMTP_PORT || '587'),
   secure: false,
@@ -137,7 +137,7 @@ async function getEmailData(attemptId: string): Promise<EmailData | null> {
     teacher_name: attempt.teacher_name || 'Your Teacher',
     teacher_email: attempt.teacher_email || '',
     school_name: attempt.school_name || 'School',
-    questions: questions?.map((q: any) => ({
+    questions: questions?.map((q: { question_text: string; student_answer_text?: string; correct_answer_text: string; is_correct: boolean; explanation?: string }) => ({
       question_text: q.question_text,
       student_answer: q.student_answer_text || 'Not answered',
       correct_answer: q.correct_answer_text,

@@ -14,13 +14,18 @@ import toast from 'react-hot-toast'
 interface StudentLoginProps {
   onLoginSuccess: (sessionData: {
     student_name: string
+    student_class_level: string
     session_id: string
+    session_code: string
     exam_id: string
     exam_title: string
     duration_minutes: number
     instructions?: string
     participant_id: string
     student_id: string
+    teacher_id: string
+    camera_monitoring_enabled: boolean
+    show_results_after_submit: boolean
     can_resume?: boolean
     attempt_id?: string
     time_remaining?: number
