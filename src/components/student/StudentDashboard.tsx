@@ -74,7 +74,7 @@ export default function StudentDashboard({
   const [loading, setLoading] = useState(true)
   const [sessionCode, setSessionCode] = useState('')
   const [joiningSession, setJoiningSession] = useState(false)
-  const [showDemoModal, setShowDemoModal] = useState(false)
+
 
   useEffect(() => {
     loadUpcomingExams()
@@ -271,7 +271,7 @@ export default function StudentDashboard({
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="flex justify-center">
                       {/* Join Session */}
                       <div className="space-y-3">
                         <h3 className="font-semibold text-gray-800">Join Exam Session</h3>
@@ -293,18 +293,7 @@ export default function StudentDashboard({
                         </div>
                       </div>
 
-                      {/* Demo Exam */}
-                      <div className="space-y-3">
-                        <h3 className="font-semibold text-gray-800">Practice First</h3>
-                        <Button
-                          onClick={() => setShowDemoModal(true)}
-                          variant="outline"
-                          className="w-full border-green-300 text-green-700 hover:bg-green-50"
-                        >
-                          <Play className="w-4 h-4 mr-2" />
-                          Take Demo Exam
-                        </Button>
-                      </div>
+
                     </div>
                   </CardContent>
                 </Card>
@@ -455,13 +444,7 @@ export default function StudentDashboard({
                   </CardHeader>
                   <CardContent className="p-6">
                     <div className="space-y-4 text-sm">
-                      <div className="flex items-start space-x-3">
-                        <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
-                        <div>
-                          <div className="font-medium">Take the Demo First</div>
-                          <div className="text-gray-600">Practice with our demo exam to get familiar with the interface.</div>
-                        </div>
-                      </div>
+
                       <div className="flex items-start space-x-3">
                         <CheckCircle className="w-5 h-5 text-green-500 mt-0.5" />
                         <div>
@@ -492,68 +475,7 @@ export default function StudentDashboard({
         </div>
       </div>
 
-      {/* Demo Exam Modal */}
-      <AnimatePresence>
-        {showDemoModal && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white rounded-2xl p-6 w-full max-w-md"
-            >
-              <div className="text-center mb-6">
-                <div className="mx-auto w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mb-4">
-                  <Play className="w-8 h-8 text-green-600" />
-                </div>
-                <h3 className="text-xl font-bold mb-2">Demo Exam</h3>
-                <p className="text-gray-600">
-                  Take a practice exam to familiarize yourself with the exam interface and question types.
-                </p>
-              </div>
 
-              <div className="space-y-4 mb-6">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Duration:</span>
-                  <span className="font-medium">5 minutes</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Questions:</span>
-                  <span className="font-medium">5 sample questions</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-gray-600">Scoring:</span>
-                  <span className="font-medium">Practice only</span>
-                </div>
-              </div>
-
-              <div className="flex space-x-3">
-                <Button
-                  onClick={() => {
-                    setShowDemoModal(false)
-                    onStartDemo()
-                  }}
-                  className="flex-1 bg-green-600 hover:bg-green-700"
-                >
-                  Start Demo
-                </Button>
-                <Button
-                  onClick={() => setShowDemoModal(false)}
-                  variant="outline"
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </ModernBackground>
   )
 }

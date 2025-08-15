@@ -8,6 +8,7 @@ import { Exam, Question, UserExamAttempt, UserAnswer } from '@/types/database'
 import PersistentExamTimer from './PersistentExamTimer'
 import QuestionDisplay from './QuestionDisplay'
 import ExamInstructions from './ExamInstructions'
+import DemoExam from './DemoExam'
 import StudentWarningDisplay from './StudentWarningDisplay'
 import { calculateAndSaveScore, validateAndMarkAnswers } from '@/lib/auto-scoring'
 
@@ -30,6 +31,9 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
   const [warnings, setWarnings] = useState<string[]>([])
   const [isOnline, setIsOnline] = useState(true)
   const [showInstructions, setShowInstructions] = useState(true)
+  const [showDemo, setShowDemo] = useState(false)
+  const [upcomingExams, setUpcomingExams] = useState<Array<{title: string, date: string, duration: number}>>([])
+  const [loadingUpcoming, setLoadingUpcoming] = useState(true)
   const [examStarted, setExamStarted] = useState(false)
 
   const warningShown = useRef(false)
@@ -148,6 +152,13 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
     }
   }, [profile, examId])
 
+  // Load upcoming exams when profile is available and showing instructions
+  useEffect(() => {
+    if (profile?.class_level && showInstructions) {
+      loadUpcomingExams()
+    }
+  }, [profile?.class_level, showInstructions])
+
   const initializeExam = async () => {
     try {
       setLoading(true)
@@ -224,6 +235,51 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
       setError(err.message || 'Failed to load exam')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const loadUpcomingExams = async () => {
+    if (!profile?.class_level) return
+    
+    try {
+      const now = new Date().toISOString()
+      const { data, error } = await supabase
+        .from('exam_sessions')
+        .select(`
+          *,
+          exam:exams (
+            id,
+            title,
+            duration_minutes,
+            total_questions,
+            passing_score
+          )
+        `)
+        .eq('class_level', profile.class_level)
+        .eq('status', 'active')
+        .gte('ends_at', now)
+        .order('starts_at', { ascending: true })
+        .limit(5)
+
+      if (error) throw error
+
+      const formattedExams = (data || []).map(exam => ({
+        title: exam.exam.title,
+        date: new Date(exam.starts_at).toLocaleDateString('en-US', { 
+          weekday: 'short', 
+          month: 'short', 
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        duration: exam.exam.duration_minutes
+      }))
+      
+      setUpcomingExams(formattedExams)
+    } catch (error) {
+      console.error('Error loading upcoming exams:', error)
+    } finally {
+      setLoadingUpcoming(false)
     }
   }
 
@@ -372,6 +428,17 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
     )
   }
 
+  if (showDemo) {
+    return (
+      <DemoExam 
+        onExit={() => {
+          setShowDemo(false)
+          setShowInstructions(true)
+        }}
+      />
+    )
+  }
+
   if (showInstructions && exam && profile) {
     return (
       <ExamInstructions 
@@ -379,11 +446,17 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
         examTitle={exam.title} 
         durationMinutes={exam.duration_minutes}
         instructions={exam.description}
+        cameraRequired={false}
         onContinueToExam={() => {
           setShowInstructions(false)
           setExamStarted(true)
           startExam()
-        }} 
+        }}
+        onStartDemo={() => {
+          setShowDemo(true)
+          setShowInstructions(false)
+        }}
+        upcomingExams={upcomingExams}
       />
     )
   }

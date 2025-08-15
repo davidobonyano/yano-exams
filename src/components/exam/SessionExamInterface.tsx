@@ -14,12 +14,13 @@ import { Badge } from '@/components/ui/badge'
 import { calculateAndSaveScore, validateAndMarkAnswers } from '@/lib/auto-scoring'
 import { AnimatedBackground } from '@/components/ui/animated-background'
 import { VideoStream } from '@/components/ui/video-stream'
-import { Clock, AlertTriangle, Wifi, WifiOff, BookOpen, CheckCircle, Circle, ArrowLeft, ArrowRight, Send, Eye, EyeOff, Timer, Target, Zap, Camera, BarChart3, ChevronLeft, ChevronRight, RotateCcw, Flag } from 'lucide-react'
+import { Clock, AlertTriangle, Wifi, WifiOff, BookOpen, CheckCircle, Circle, ArrowLeft, ArrowRight, Send, Eye, EyeOff, Timer, Target, Zap, Camera, BarChart3, ChevronLeft, ChevronRight, RotateCcw, Flag, Mic } from 'lucide-react'
 import { useCheatingDetection } from '@/hooks/useCheatingDetection'
 import PersistentExamTimer from './PersistentExamTimer'
 import SessionQuestionDisplay from './SessionQuestionDisplay'
 import ExamInstructions from './ExamInstructions'
-import CameraAccess from './CameraAccess'
+import DemoExam from './DemoExam'
+
 import CameraPreview from './CameraPreview'
 import SubmitConfirmationModal from './SubmitConfirmationModal'
 import StudentWarningDisplay from './StudentWarningDisplay'
@@ -49,10 +50,13 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
   const [error, setError] = useState('')
   const [isOnline, setIsOnline] = useState(true)
   const [showInstructions, setShowInstructions] = useState(true)
+  const [showDemo, setShowDemo] = useState(false)
+  const [upcomingExams, setUpcomingExams] = useState<Array<{title: string, date: string, duration: number}>>([])
+  const [loadingUpcoming, setLoadingUpcoming] = useState(true)
   const [examStarted, setExamStarted] = useState(false)
   const [cameraAccessRequired, setCameraAccessRequired] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
-  const [showCameraAccess, setShowCameraAccess] = useState(false)
+
   const [webrtcConnection, setWebrtcConnection] = useState<StudentWebRTC | null>(null)
   const [frameStreaming, setFrameStreaming] = useState<CameraFrameStreaming | null>(null)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
@@ -102,7 +106,6 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     })
     
     setCameraStream(stream)
-    setShowCameraAccess(false)
     cameraPromptShown.current = false
     
     // Update camera status in database for teacher monitoring
@@ -197,7 +200,6 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       router.push('/')
     } else {
       // If optional, continue without camera
-      setShowCameraAccess(false)
       if (session) {
         initializeExam()
       }
@@ -235,15 +237,11 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     console.log('Camera required:', cameraRequired, 'Camera stream:', !!cameraStream, 'Prompt shown:', cameraPromptShown.current)
     
     if (cameraRequired && !cameraStream && !cameraPromptShown.current && !examCompleted && examInitialized && !cameraAccessDisabled) {
-      console.log('Showing camera access prompt after exam initialization')
+      console.log('Camera required but handled by instructions page')
       setCameraAccessRequired(true)
-      setShowCameraAccess(true)
       cameraPromptShown.current = true
-    } else if (examCompleted && showCameraAccess) {
-      console.log('Exam completed - hiding camera access prompt')
-      setShowCameraAccess(false)
     }
-  }, [session, sessionId, examId, cameraStream, examCompleted, showCameraAccess, examInitialized, cameraAccessDisabled])
+  }, [session, sessionId, examId, cameraStream, examCompleted, examInitialized, cameraAccessDisabled])
 
   // Enhanced cheating detection is now handled by the useCheatingDetection hook
   // Additional activity tracking when exam is active
@@ -306,6 +304,13 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
   useEffect(() => {
     frameStreamingRef.current = frameStreaming
   }, [frameStreaming])
+
+  // Load upcoming exams when session is available
+  useEffect(() => {
+    if (session?.student?.class_level && showInstructions) {
+      loadUpcomingExams()
+    }
+  }, [session?.student?.class_level, showInstructions])
 
   // Cleanup camera and WebRTC on component unmount only
   useEffect(() => {
@@ -535,6 +540,51 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     }, 500)
   }
 
+  const loadUpcomingExams = async () => {
+    if (!session?.student?.class_level) return
+    
+    try {
+      const now = new Date().toISOString()
+      const { data, error } = await supabase
+        .from('exam_sessions')
+        .select(`
+          *,
+          exam:exams (
+            id,
+            title,
+            duration_minutes,
+            total_questions,
+            passing_score
+          )
+        `)
+        .eq('class_level', session.student.class_level)
+        .eq('status', 'active')
+        .gte('ends_at', now)
+        .order('starts_at', { ascending: true })
+        .limit(5)
+
+      if (error) throw error
+
+      const formattedExams = (data || []).map(exam => ({
+        title: exam.exam.title,
+        date: new Date(exam.starts_at).toLocaleDateString('en-US', { 
+          weekday: 'short', 
+          month: 'short', 
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        }),
+        duration: exam.exam.duration_minutes
+      }))
+      
+      setUpcomingExams(formattedExams)
+    } catch (error) {
+      console.error('Error loading upcoming exams:', error)
+    } finally {
+      setLoadingUpcoming(false)
+    }
+  }
+
   const submitExam = async () => {
     if (!attempt || !session) return
 
@@ -626,11 +676,16 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         console.error('Failed to calculate exam score:', scoringResult.error)
       }
 
-      // Set exam completed state and permanently disable camera access
+      // Set exam completed state and clean up camera access
       setExamCompleted(true)
-      setShowCameraAccess(false)
       setExamInitialized(false) // Reset initialization flag
       setCameraAccessDisabled(true) // Permanently disable camera access
+      
+      // Stop camera stream after submission
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => track.stop())
+        setCameraStream(null)
+      }
       
       // After showing success state, redirect after delay
       setTimeout(() => {
@@ -749,7 +804,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     )
   }
 
-  if (loading && !showCameraAccess) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
         <motion.div
@@ -825,6 +880,17 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     )
   }
 
+  if (showDemo) {
+    return (
+      <DemoExam 
+        onExit={() => {
+          setShowDemo(false)
+          setShowInstructions(true)
+        }}
+      />
+    )
+  }
+
   if (showInstructions && session) {
     return (
       <ExamInstructions 
@@ -832,11 +898,18 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         examTitle={session.exam.title} 
         durationMinutes={session.exam.duration_minutes}
         instructions={(session.exam as any).instructions || 'Please read all questions carefully and answer to the best of your ability.'}
+        cameraRequired={session.session.camera_monitoring_enabled}
+        onCameraGranted={handleCameraGranted}
         onContinueToExam={() => {
           setShowInstructions(false)
           setExamStarted(true)
           startExam()
-        }} 
+        }}
+        onStartDemo={() => {
+          setShowDemo(true)
+          setShowInstructions(false)
+        }}
+        upcomingExams={upcomingExams}
       />
     )
   }
@@ -916,57 +989,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
   // Debug render state (removed for cleaner logs)
 
-  // Show camera access prompt if needed (but not if exam is completed or submitted)
-  if (showCameraAccess && session && !examCompleted && !showResults) {
-    return (
-      <div className="fixed inset-0 z-[99999] overflow-y-auto bg-black/80">
-        <div className="min-h-screen flex items-center justify-center p-4">
-          <div className="bg-white rounded-lg p-8 max-w-md w-full">
-            <h2 className="text-xl font-bold mb-4">📹 Camera Access Required</h2>
-            <p className="mb-4">This exam session requires camera monitoring for academic integrity.</p>
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 mb-4 text-sm">
-              <p><strong>Why we need camera access:</strong></p>
-              <ul className="list-disc list-inside mt-1 text-gray-700">
-                <li>Monitor exam environment</li>
-                <li>Ensure academic integrity</li>
-                <li>Prevent cheating attempts</li>
-              </ul>
-            </div>
-            
-            <div className="flex gap-4">
-              <button
-                onClick={async () => {
-                  try {
-                    const stream = await navigator.mediaDevices.getUserMedia({
-                      video: {
-                        width: { ideal: 640 },
-                        height: { ideal: 480 },
-                        facingMode: 'user'
-                      },
-                      audio: false
-                    })
-                    handleCameraGranted(stream)
-                  } catch (err) {
-                    alert('Camera access denied. Please allow camera access to continue with the exam.')
-                  }
-                }}
-                className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2 rounded-lg font-medium"
-              >
-                Allow Camera
-              </button>
-              
-              <button
-                onClick={handleCameraDeclined}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-6 py-2 rounded-lg font-medium"
-              >
-                Decline
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-    )
-  }
+
 
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ userSelect: 'none' }}>
@@ -1044,13 +1067,16 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
             {/* Timer and Camera Status */}
             <div className="flex items-center space-x-4">
-              {/* Camera Indicator */}
+              {/* Camera & Audio Indicator */}
               {cameraStream && (
                 <div className="text-center p-4 border rounded-lg bg-green-50">
-                  <Camera className="w-4 h-4 mx-auto text-green-500 mb-1" />
+                  <div className="flex items-center justify-center space-x-2 mb-1">
+                    <Camera className="w-4 h-4 text-green-500" />
+                    <Mic className="w-4 h-4 text-green-500" />
+                  </div>
                   <div className="flex items-center justify-center space-x-1">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-xs font-medium text-green-700">Camera On</span>
+                    <span className="text-xs font-medium text-green-700">Camera & Audio On</span>
                   </div>
                 </div>
               )}

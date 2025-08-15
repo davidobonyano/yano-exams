@@ -249,6 +249,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
   return (
     <AnimatePresence>
       <motion.div
+        key="session-results-modal"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
@@ -306,7 +307,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                 <div className="flex justify-end">
                   <MagneticButton
                     onClick={exportResults}
-                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg"
+                    className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white px-4 py-2 rounded-lg flex items-center justify-center"
                   >
                     <Download className="w-4 h-4 mr-2" />
                     Export CSV
@@ -390,7 +391,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                       <tbody className="bg-white divide-y divide-gray-200">
                         {results.map((result, index) => (
                         <motion.tr
-                        key={`${result.attempt_id || result.student_id || index}-${index}`}
+                        key={result.attempt_id || result.student_id || `result-${index}`}
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: index * 0.1 }}
@@ -460,7 +461,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                                   onClick={() => viewStudentDetails(result.attempt_id)}
                                   variant="outline"
                                   size="sm"
-                                  className="h-8 px-4 text-xs border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300"
+                                  className="h-8 px-4 text-xs border-blue-200 text-blue-600 hover:bg-blue-50 hover:border-blue-300 flex items-center justify-center"
                                 >
                                   <Eye className="w-3 h-3 mr-1" />
                                   View
@@ -492,6 +493,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
       <AnimatePresence>
         {showStudentDetails && selectedStudentDetails && (
           <motion.div
+            key="student-details-modal"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
@@ -518,6 +520,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                   onClick={() => setShowStudentDetails(false)}
                   variant="outline"
                   size="sm"
+                  className="flex items-center justify-center"
                 >
                   <X className="w-4 h-4" />
                 </MagneticButton>
@@ -527,7 +530,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                 <div className="p-6 space-y-6">
                   {/* Summary */}
                   <div className="grid grid-cols-4 gap-4">
-                  <Card key={`${selectedStudentDetails.attempt_info.attempt_id}-score`}>
+                  <Card key="summary-score">
                   <CardContent className="p-4 text-center">
                   <div className="text-2xl font-bold text-blue-600">
                   {selectedStudentDetails.attempt_info.percentage_score.toFixed(1)}%
@@ -535,7 +538,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                   <div className="text-sm text-gray-500">Final Score</div>
                   </CardContent>
                   </Card>
-                  <Card key={`${selectedStudentDetails.attempt_info.attempt_id}-correct`}>
+                  <Card key="summary-correct">
                   <CardContent className="p-4 text-center">
                   <div className="text-2xl font-bold text-green-600">
                   {selectedStudentDetails.attempt_info.correct_answers}
@@ -543,7 +546,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                   <div className="text-sm text-gray-500">Correct</div>
                   </CardContent>
                   </Card>
-                  <Card key={`${selectedStudentDetails.attempt_info.attempt_id}-incorrect`}>
+                  <Card key="summary-incorrect">
                   <CardContent className="p-4 text-center">
                   <div className="text-2xl font-bold text-orange-600">
                   {selectedStudentDetails.attempt_info.total_questions - selectedStudentDetails.attempt_info.correct_answers}
@@ -551,7 +554,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
                   <div className="text-sm text-gray-500">Incorrect</div>
                   </CardContent>
                   </Card>
-                  <Card key={`${selectedStudentDetails.attempt_info.attempt_id}-points`}>
+                  <Card key="summary-points">
                   <CardContent className="p-4 text-center">
                   <div className="text-2xl font-bold">
                   {selectedStudentDetails.attempt_info.points_earned}/{selectedStudentDetails.attempt_info.total_points}

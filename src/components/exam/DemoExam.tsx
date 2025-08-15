@@ -109,6 +109,7 @@ const DEMO_QUESTIONS: DemoQuestion[] = [
 export default function DemoExam({ onExit }: DemoExamProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [visitedQuestions, setVisitedQuestions] = useState<Set<number>>(new Set([0]))
   const [timeRemaining, setTimeRemaining] = useState(300) // 5 minutes
   const [examPhase, setExamPhase] = useState<'active' | 'review' | 'results'>('active')
   const [showExplanation, setShowExplanation] = useState(false)
@@ -146,7 +147,9 @@ export default function DemoExam({ onExit }: DemoExamProps) {
 
   const handleNext = () => {
     if (currentQuestionIndex < totalQuestions - 1) {
-      setCurrentQuestionIndex(prev => prev + 1)
+      const nextIndex = currentQuestionIndex + 1
+      setCurrentQuestionIndex(nextIndex)
+      setVisitedQuestions(prev => new Set([...prev, nextIndex]))
     } else {
       setExamPhase('review')
     }
@@ -154,7 +157,9 @@ export default function DemoExam({ onExit }: DemoExamProps) {
 
   const handlePrevious = () => {
     if (currentQuestionIndex > 0) {
-      setCurrentQuestionIndex(prev => prev - 1)
+      const prevIndex = currentQuestionIndex - 1
+      setCurrentQuestionIndex(prevIndex)
+      setVisitedQuestions(prev => new Set([...prev, prevIndex]))
     }
   }
 
@@ -165,6 +170,7 @@ export default function DemoExam({ onExit }: DemoExamProps) {
   const handleRestart = () => {
     setCurrentQuestionIndex(0)
     setAnswers({})
+    setVisitedQuestions(new Set([0]))
     setTimeRemaining(300)
     setExamPhase('active')
     setShowExplanation(false)
@@ -333,10 +339,12 @@ export default function DemoExam({ onExit }: DemoExamProps) {
                     <div
                       key={question.id}
                       className={`w-12 h-12 rounded-lg flex items-center justify-center text-sm font-medium ${
-                        answers[question.id]
-                          ? 'bg-green-100 text-green-800 border-2 border-green-300'
-                          : 'bg-red-100 text-red-800 border-2 border-red-300'
-                      }`}
+                      answers[question.id]
+                      ? 'bg-green-100 text-green-800 border-2 border-green-300'
+                      : visitedQuestions.has(index)
+                          ? 'bg-red-100 text-red-800 border-2 border-red-300'
+                           : 'bg-gray-100 text-gray-800 border-2 border-gray-300'
+                       }`}
                     >
                       {index + 1}
                     </div>
@@ -642,14 +650,19 @@ export default function DemoExam({ onExit }: DemoExamProps) {
                         key={question.id}
                         whileHover={{ scale: 1.1 }}
                         whileTap={{ scale: 0.9 }}
-                        onClick={() => setCurrentQuestionIndex(index)}
+                        onClick={() => {
+                          setCurrentQuestionIndex(index)
+                        setVisitedQuestions(prev => new Set([...prev, index]))
+                        }}
                         className={`relative w-10 h-10 rounded-lg text-sm font-bold transition-all ${
-                          index === currentQuestionIndex
-                            ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg scale-110'
+                        index === currentQuestionIndex
+                        ? 'bg-gradient-to-r from-blue-500 to-purple-500 text-white shadow-lg scale-110'
                             : answers[question.id]
-                            ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-800 border-2 border-green-300'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:scale-105'
-                        }`}
+                             ? 'bg-gradient-to-r from-green-100 to-green-200 text-green-800 border-2 border-green-300'
+                             : visitedQuestions.has(index)
+                             ? 'bg-gradient-to-r from-red-100 to-red-200 text-red-800 border-2 border-red-300'
+                             : 'bg-gray-100 text-gray-600 hover:bg-gray-200 hover:scale-105'
+                         }`}
                       >
                         {index + 1}
                         {answers[question.id] && index !== currentQuestionIndex && (
@@ -662,15 +675,19 @@ export default function DemoExam({ onExit }: DemoExamProps) {
                   </div>
                   
                   <div className="mt-4 pt-4 border-t border-gray-200 space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Answered:</span>
-                      <span className="font-medium text-green-600">{answeredCount}/{totalQuestions}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-gray-600">Remaining:</span>
-                      <span className="font-medium text-orange-600">{totalQuestions - answeredCount}</span>
-                    </div>
+                  <div className="flex justify-between">
+                  <span className="text-gray-600">Answered:</span>
+                  <span className="font-medium text-green-600">{answeredCount}/{totalQuestions}</span>
                   </div>
+                  <div className="flex justify-between">
+                  <span className="text-gray-600">Visited:</span>
+                  <span className="font-medium text-red-600">{visitedQuestions.size - answeredCount}</span>
+                  </div>
+                    <div className="flex justify-between">
+                       <span className="text-gray-600">Remaining:</span>
+                       <span className="font-medium text-gray-600">{totalQuestions - visitedQuestions.size}</span>
+                     </div>
+                   </div>
                 </CardContent>
               </Card>
             </motion.div>

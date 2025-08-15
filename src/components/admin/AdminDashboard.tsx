@@ -28,6 +28,8 @@ import { supabase } from '@/lib/supabase'
 import { Teacher, Exam, ExamSession } from '@/types/database-v2'
 import CreateExamModal from './CreateExamModal'
 import CreateSessionModal from './CreateSessionModal'
+import EndSessionModal from './EndSessionModal'
+import DeleteSessionModal from './DeleteSessionModal'
 import QuestionManager from './QuestionManager'
 import StudentManagement from './StudentManagement'
 import ExamTracker from './ExamTracker'
@@ -60,6 +62,9 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
   const [selectedExam, setSelectedExam] = useState<Exam | null>(null)
   const [selectedSession, setSelectedSession] = useState<ExamSession | null>(null)
   const [copiedSessions, setCopiedSessions] = useState<Set<string>>(new Set())
+  const [endSessionModal, setEndSessionModal] = useState<{isOpen: boolean, sessionId: string, sessionName: string}>({isOpen: false, sessionId: '', sessionName: ''})
+  const [deleteSessionModal, setDeleteSessionModal] = useState<{isOpen: boolean, sessionId: string, sessionName: string}>({isOpen: false, sessionId: '', sessionName: ''})
+  const [modalLoading, setModalLoading] = useState(false)
 
   useEffect(() => {
     fetchTeacherData()
@@ -292,33 +297,38 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
 
   // Function to delete a session
   const handleDeleteSession = async (sessionId: string, sessionName: string) => {
-    if (!confirm(`Are you sure you want to delete the session "${sessionName}"? This action cannot be undone and will delete all associated data.`)) {
-      return
-    }
+    setDeleteSessionModal({isOpen: true, sessionId, sessionName})
+  }
 
+  const confirmDeleteSession = async () => {
+    setModalLoading(true)
     try {
       const { error } = await supabase
         .from('exam_sessions')
         .delete()
-        .eq('id', sessionId)
+        .eq('id', deleteSessionModal.sessionId)
         .eq('teacher_id', user.id) // Ensure teacher can only delete their own sessions
 
       if (error) throw error
 
       toast.success('Session deleted successfully!')
       fetchTeacherDataSilently()
+      setDeleteSessionModal({isOpen: false, sessionId: '', sessionName: ''})
     } catch (error) {
       console.error('Error deleting session:', error)
       toast.error('Failed to delete session')
+    } finally {
+      setModalLoading(false)
     }
   }
 
   // Function to end a session manually
   const handleEndSession = async (sessionId: string, sessionName: string) => {
-    if (!confirm(`Are you sure you want to end the session "${sessionName}"? Students will no longer be able to access this exam.`)) {
-      return
-    }
+    setEndSessionModal({isOpen: true, sessionId, sessionName})
+  }
 
+  const confirmEndSession = async () => {
+    setModalLoading(true)
     try {
       const { error } = await supabase
         .from('exam_sessions')
@@ -326,16 +336,19 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
           status: 'ended',
           updated_at: new Date().toISOString()
         })
-        .eq('id', sessionId)
+        .eq('id', endSessionModal.sessionId)
         .eq('teacher_id', user.id)
 
       if (error) throw error
 
       toast.success('Session ended successfully!')
       fetchTeacherDataSilently()
+      setEndSessionModal({isOpen: false, sessionId: '', sessionName: ''})
     } catch (error) {
       console.error('Error ending session:', error)
       toast.error('Failed to end session')
+    } finally {
+      setModalLoading(false)
     }
   }
 
@@ -1028,6 +1041,22 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
           }}
         />
       )}
+
+      <EndSessionModal
+        isOpen={endSessionModal.isOpen}
+        sessionName={endSessionModal.sessionName}
+        onConfirm={confirmEndSession}
+        onCancel={() => setEndSessionModal({isOpen: false, sessionId: '', sessionName: ''})}
+        loading={modalLoading}
+      />
+
+      <DeleteSessionModal
+        isOpen={deleteSessionModal.isOpen}
+        sessionName={deleteSessionModal.sessionName}
+        onConfirm={confirmDeleteSession}
+        onCancel={() => setDeleteSessionModal({isOpen: false, sessionId: '', sessionName: ''})}
+        loading={modalLoading}
+      />
     </div>
   )
 }

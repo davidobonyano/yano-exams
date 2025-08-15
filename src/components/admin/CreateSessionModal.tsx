@@ -122,6 +122,13 @@ export default function CreateSessionModal({ exam, onClose, onCreated }: CreateS
                 
                 {/* Header */}
                 <CardHeader className="relative text-center">
+                  <button
+                    onClick={onClose}
+                    className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                  
                   <motion.div
                     initial={{ scale: 0, rotate: -180 }}
                     animate={{ scale: 1, rotate: 0 }}
@@ -188,9 +195,9 @@ export default function CreateSessionModal({ exam, onClose, onCreated }: CreateS
 
                   <MagneticButton
                     onClick={onClose}
-                    className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl"
+                    className="w-full h-12 text-lg font-semibold bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white rounded-xl flex items-center justify-center"
                   >
-                    <CheckCircle className="w-5 h-5 mr-3" />
+                    <CheckCircle className="w-5 h-5 mr-2" />
                     Done
                   </MagneticButton>
                 </CardContent>
@@ -444,13 +451,13 @@ export default function CreateSessionModal({ exam, onClose, onCreated }: CreateS
                           <motion.div
                             animate={{ rotate: 360 }}
                             transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                            className="w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-3"
+                            className="w-5 h-5 border-2 border-white border-t-transparent rounded-full mr-2"
                           />
                           Creating Session...
                         </>
                       ) : (
                         <>
-                          <Settings className="w-5 h-5 mr-3" />
+                          <Settings className="w-5 h-5 mr-2" />
                           Create Session
                         </>
                       )}
@@ -459,8 +466,9 @@ export default function CreateSessionModal({ exam, onClose, onCreated }: CreateS
                     <MagneticButton
                       onClick={onClose}
                       variant="outline"
-                      className="flex-1 h-14 text-lg font-semibold bg-white/80 backdrop-blur-sm border-2 border-gray-200 text-gray-700 hover:bg-white hover:border-gray-300 rounded-xl"
+                      className="flex-1 h-14 text-lg font-semibold bg-white/80 backdrop-blur-sm border-2 border-gray-200 text-gray-700 hover:bg-white hover:border-gray-300 rounded-xl flex items-center justify-center"
                     >
+                      <X className="w-5 h-5 mr-2" />
                       Cancel
                     </MagneticButton>
                   </motion.div>

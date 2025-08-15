@@ -242,27 +242,7 @@ export default function SimpleStudentLogin({ onLoginSuccess, onStartDemo }: Stud
                   </button>
                 </motion.div>
 
-                {/* Take Demo Exam Section */}
-                {onStartDemo && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 1.9, duration: 0.6 }}
-                    className="pt-2"
-                  >
-                    <div className="space-y-3">
-                      <h3 className="font-semibold text-gray-800 text-center">Practice First</h3>
-                      <Button
-                        onClick={onStartDemo}
-                        variant="outline"
-                        className="w-full border-green-300 text-green-700 hover:bg-green-50 h-12"
-                      >
-                        <Play className="w-4 h-4 mr-2" />
-                        Take Demo Exam
-                      </Button>
-                    </div>
-                  </motion.div>
-                )}
+
 
                 {/* Instructions */}
                 <motion.div
