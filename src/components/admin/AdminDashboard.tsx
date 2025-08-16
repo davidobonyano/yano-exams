@@ -572,6 +572,21 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
                 </div>
               </div>
             </button>
+            
+            <a
+              href="/admin/results"
+              className="group relative bg-gradient-to-br from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
+            >
+              <div className="flex flex-col items-center text-center space-y-3">
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center">
+                  <Mail className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-semibold">Results & Email</h3>
+                  <p className="text-xs text-white/80 mt-1">Manage exam results</p>
+                </div>
+              </div>
+            </a>
 
           </div>
         </div>

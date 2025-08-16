@@ -23,6 +23,7 @@ import {
   Unlock
 } from 'lucide-react'
 import toast from 'react-hot-toast'
+import Link from 'next/link'
 
 interface ExamResult {
   id: string
@@ -41,10 +42,12 @@ interface ExamResult {
   students: {
     full_name: string
     student_id: string
+    email?: string | null
   }
   exam_sessions: {
     session_code: string
     session_name: string
+    show_results_after_submit: boolean
   }
   exams: {
     title: string
@@ -60,22 +63,29 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedSession, setSelectedSession] = useState<string>('')
-  const [sessions, setSessions] = useState<Array<{ id: string; session_code: string; session_name: string; allow_student_results_view: boolean }>>([])
-  const [emailAddress, setEmailAddress] = useState('')
+  const [sessions, setSessions] = useState<Array<{ id: string; session_code: string; session_name: string }>>([])
+  const [emailAddresses, setEmailAddresses] = useState<{[key: string]: string}>({})
   const [emailingResults, setEmailingResults] = useState<Set<string>>(new Set())
   const [selectedStudentDetails, setSelectedStudentDetails] = useState<DetailedStudentResult | null>(null)
   const [showStudentDetails, setShowStudentDetails] = useState(false)
 
   useEffect(() => {
-    loadResults()
-    loadSessions()
+    if (teacherId) {
+      loadResults()
+      loadSessions()
+    }
   }, [teacherId])
 
   const loadSessions = async () => {
+    if (!teacherId) {
+      console.warn('No teacher ID provided for loading sessions')
+      return
+    }
+
     try {
       const { data, error } = await supabase
         .from('exam_sessions')
-        .select('id, session_code, session_name, allow_student_results_view')
+        .select('id, session_code, session_name')
         .eq('teacher_id', teacherId)
         .order('created_at', { ascending: false })
 
@@ -87,8 +97,14 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
   }
 
   const loadResults = async () => {
+    if (!teacherId) {
+      console.warn('No teacher ID provided for loading results')
+      return
+    }
+
     try {
       setLoading(true)
+      // First get the results
       const { data, error } = await supabase
         .from('exam_results')
         .select(`
@@ -100,7 +116,8 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
           exam_sessions!inner (
             session_code,
             session_name,
-            teacher_id
+            teacher_id,
+            show_results_after_submit
           ),
           exams (
             title
@@ -110,7 +127,46 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
         .order('created_at', { ascending: false })
 
       if (error) throw error
-      setResults(data || [])
+
+      // Now get email data from teacher_students table
+      const studentIds = data?.map(result => result.students.student_id) || []
+      console.log('Student IDs found:', studentIds)
+      
+      const { data: teacherStudentsData, error: emailError } = await supabase
+        .from('teacher_students')
+        .select('student_id, email')
+        .eq('teacher_id', teacherId)
+        .in('student_id', studentIds)
+
+      console.log('Teacher students email data:', teacherStudentsData)
+      console.log('Email query error:', emailError)
+
+      // Create email lookup map
+      const emailMap = new Map()
+      teacherStudentsData?.forEach(ts => {
+        if (ts.email) {
+          console.log(`Setting email for ${ts.student_id}:`, ts.email)
+        }
+        emailMap.set(ts.student_id, {
+          email: ts.email
+        })
+      })
+
+      // Merge email data into results
+      const resultsWithEmails = data?.map(result => {
+        const emailData = emailMap.get(result.students.student_id)
+        const mergedResult = {
+          ...result,
+          students: {
+            ...result.students,
+            ...emailData
+          }
+        }
+        console.log(`Student ${result.students.student_id} final result:`, mergedResult.students)
+        return mergedResult
+      }) || []
+
+      setResults(resultsWithEmails)
     } catch (error) {
       console.error('Error loading results:', error)
       toast.error('Failed to load results')
@@ -119,38 +175,80 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
     }
   }
 
-  const toggleResultsVisibility = async (sessionId: string, currentlyVisible: boolean) => {
+  const sendAllEmailsForSession = async (sessionId: string) => {
+    const sessionResults = results.filter(result => result.session_id === sessionId)
+    const resultsWithEmails = sessionResults.filter(result => 
+      result.students.email || emailAddresses[result.id]?.trim()
+    )
+
+    if (resultsWithEmails.length === 0) {
+      toast.error('No email addresses found for this session')
+      return
+    }
+
+    setEmailingResults(prev => new Set(prev).add(sessionId))
+
     try {
-      const functionName = currentlyVisible ? 'hide_results_from_students' : 'release_results_to_students'
+      let successCount = 0
+      let failCount = 0
+
+      for (const result of resultsWithEmails) {
+        const emailToSend = emailAddresses[result.id]?.trim() || result.students.email
+        
+        if (emailToSend) {
+          try {
+            const response = await fetch('/api/admin/send-result-email', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                resultId: result.id,
+                email: emailToSend,
+                studentName: result.students.full_name
+              }),
+            })
+
+            if (response.ok) {
+              successCount++
+            } else {
+              failCount++
+            }
+          } catch {
+            failCount++
+          }
+        }
+      }
+
+      toast.success(`Emails sent: ${successCount} successful, ${failCount} failed`)
       
-      const { error } = await supabase.rpc(functionName, {
-        session_id_param: sessionId
+      // Clear email inputs after bulk send
+      setEmailAddresses(prev => {
+        const newState = { ...prev }
+        resultsWithEmails.forEach(result => {
+          newState[result.id] = ''
+        })
+        return newState
       })
 
-      if (error) throw error
-
-      toast.success(
-        currentlyVisible 
-          ? 'Results hidden from students' 
-          : 'Results released to students!'
-      )
-      
-      await loadResults()
-      await loadSessions()
     } catch (error) {
-      console.error('Error toggling results visibility:', error)
-      toast.error('Failed to update results visibility')
+      console.error('Error sending bulk emails:', error)
+      toast.error('Failed to send bulk emails')
+    } finally {
+      setEmailingResults(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(sessionId)
+        return newSet
+      })
     }
   }
 
-  const sendResultByEmail = async (resultId: string, studentName: string) => {
-    if (!emailAddress.trim()) {
+  const sendResultByEmail = async (resultId: string, studentName: string, email: string) => {
+    if (!email.trim()) {
       toast.error('Please enter an email address')
       return
     }
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!emailRegex.test(emailAddress)) {
+    if (!emailRegex.test(email)) {
       toast.error('Please enter a valid email address')
       return
     }
@@ -158,46 +256,33 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
     setEmailingResults(prev => new Set(prev).add(resultId))
     
     try {
-      // Log the email attempt in the database
-      const { error } = await supabase
-        .from('result_emails')
-        .insert([{
-          result_id: resultId,
-          student_email: emailAddress,
-          teacher_id: teacherId,
-          email_status: 'pending'
-        }])
+      // Send actual email using API endpoint
+      const response = await fetch('/api/admin/send-result-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          resultId,
+          email,
+          studentName
+        }),
+      })
 
-      if (error) throw error
-
-      // TODO: Implement actual email sending logic here
-      // This would integrate with your email service (SendGrid, SMTP, etc.)
+      const emailResult = await response.json()
       
-      // For now, simulate email sending
-      await new Promise(resolve => setTimeout(resolve, 2000))
-      
-      // Update email status to sent
-      await supabase
-        .from('result_emails')
-        .update({ email_status: 'sent' })
-        .eq('result_id', resultId)
-        .eq('student_email', emailAddress)
+      if (!response.ok) {
+        throw new Error(emailResult.error || 'Failed to send email')
+      }
 
-      toast.success(`Results sent to ${emailAddress}`)
-      setEmailAddress('')
+      toast.success(`Results sent to ${email}`)
+      setEmailAddresses(prev => ({
+        ...prev,
+        [resultId]: ''
+      }))
     } catch (error) {
       console.error('Error sending email:', error)
       toast.error('Failed to send email')
-      
-      // Update email status to failed
-      await supabase
-        .from('result_emails')
-        .update({ 
-          email_status: 'failed',
-          error_message: error instanceof Error ? error.message : 'Unknown error'
-        })
-        .eq('result_id', resultId)
-        .eq('student_email', emailAddress)
     } finally {
       setEmailingResults(prev => {
         const newSet = new Set(prev)
@@ -306,10 +391,10 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
                   
                   <div className="flex items-center space-x-2">
                     <Badge 
-                      variant={group.results[0]?.results_visible_to_student ? "default" : "secondary"}
+                      variant={group.results[0]?.exam_sessions.show_results_after_submit ? "default" : "secondary"}
                       className="flex items-center space-x-1"
                     >
-                      {group.results[0]?.results_visible_to_student ? (
+                      {group.results[0]?.exam_sessions.show_results_after_submit ? (
                         <><Unlock className="w-3 h-3" /> Visible to Students</>
                       ) : (
                         <><Lock className="w-3 h-3" /> Hidden from Students</>
@@ -317,17 +402,15 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
                     </Badge>
                     
                     <Button
-                      onClick={() => toggleResultsVisibility(
-                        group.sessionId, 
-                        group.results[0]?.results_visible_to_student
-                      )}
-                      variant={group.results[0]?.results_visible_to_student ? "outline" : "default"}
+                      onClick={() => sendAllEmailsForSession(group.sessionId)}
+                      variant="default"
                       size="sm"
+                      disabled={emailingResults.has(group.sessionId)}
                     >
-                      {group.results[0]?.results_visible_to_student ? (
-                        <><EyeOff className="w-4 h-4 mr-2" /> Hide Results</>
+                      {emailingResults.has(group.sessionId) ? (
+                        <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" /> Sending...</>
                       ) : (
-                        <><Eye className="w-4 h-4 mr-2" /> Release Results</>
+                        <><Send className="w-4 h-4 mr-2" /> Send All Emails</>
                       )}
                     </Button>
                   </div>
@@ -386,35 +469,57 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
                           </td>
                           <td className="py-4 px-6">
                           <div className="flex items-center space-x-2">
-                          <Button
-                          onClick={() => viewStudentDetails(result.attempt_id)}
-                          variant="outline"
-                          size="sm"
-                          className="h-8"
-                          >
-                          <Eye className="w-3 h-3 mr-1" /> View Details
-                          </Button>
-                          <div className="flex items-center space-x-2">
-                          <Input
-                          type="email"
-                          placeholder="student@email.com"
-                          value={emailAddress}
-                            onChange={(e) => setEmailAddress(e.target.value)}
-                          className="w-48 h-8 text-sm"
-                          />
-                          <Button
-                          onClick={() => sendResultByEmail(result.id, result.students.full_name)}
-                          disabled={emailingResults.has(result.id)}
+                          <Link href={`/admin/results/${result.attempt_id}`}>
+                            <Button
+                            variant="outline"
                             size="sm"
-                              className="h-8"
-                              >
-                                  {emailingResults.has(result.id) ? (
-                                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                   ) : (
-                                     <><Send className="w-3 h-3 mr-1" /> Email</>
-                                   )}
-                                 </Button>
-                               </div>
+                            className="h-8"
+                            >
+                            <Eye className="w-3 h-3 mr-1" /> View Details
+                            </Button>
+                          </Link>
+                          <div className="flex flex-col space-y-1">
+                            <div className="flex items-center space-x-2">
+                            <Input
+                            type="email"
+                            placeholder="Enter email address"
+                            value={emailAddresses[result.id] || ''}
+                            onChange={(e) => setEmailAddresses(prev => ({
+                              ...prev,
+                                [result.id]: e.target.value
+                              }))}
+                            className="w-48 h-8 text-sm"
+                            />
+                            <Button
+                            onClick={() => sendResultByEmail(result.id, result.students.full_name, emailAddresses[result.id] || '')}
+                              disabled={emailingResults.has(result.id) || !emailAddresses[result.id]?.trim()}
+                            size="sm"
+                            className="h-8"
+                            >
+                            {emailingResults.has(result.id) ? (
+                              <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              ) : (
+                                  <><Send className="w-3 h-3 mr-1" /> Send</>
+                                )}
+                              </Button>
+                            </div>
+                            {/* Quick email options */}
+                            <div className="flex space-x-1">
+                              {result.students.email && (
+                                <Button
+                                  onClick={() => setEmailAddresses(prev => ({
+                                    ...prev,
+                                    [result.id]: result.students.email!
+                                  }))}
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-xs"
+                                >
+                                  Use: {result.students.email}
+                                </Button>
+                              )}
+                            </div>
+                          </div>
                              </div>
                            </td>
                         </motion.tr>

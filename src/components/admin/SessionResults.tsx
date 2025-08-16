@@ -203,7 +203,11 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
     try {
       console.log('Attempting to get details for attempt ID:', attemptId)
       
-      // Test direct RPC call first
+      // Show modal immediately with loading state
+      setSelectedStudentDetails(null)
+      setShowStudentDetails(true)
+      
+      // Load data in background
       const { data: rpcData, error: rpcError } = await supabase.rpc('get_detailed_student_results', {
         p_attempt_id: attemptId
       })
@@ -212,17 +216,19 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
       
       if (rpcError) {
         console.error('RPC Error:', rpcError)
+        setShowStudentDetails(false)
         return
       }
       
       if (rpcData && rpcData.success) {
         setSelectedStudentDetails(rpcData)
-        setShowStudentDetails(true)
       } else {
         console.error('RPC returned unsuccessful result:', rpcData)
+        setShowStudentDetails(false)
       }
     } catch (error) {
       console.error('Error loading student details:', error)
+      setShowStudentDetails(false)
     }
   }
 
@@ -491,7 +497,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
 
       {/* Student Details Modal */}
       <AnimatePresence>
-        {showStudentDetails && selectedStudentDetails && (
+        {showStudentDetails && (
           <motion.div
             key="student-details-modal"
             initial={{ opacity: 0 }}
@@ -510,10 +516,12 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
               <div className="p-6 border-b flex items-center justify-between">
                 <div>
                   <h2 className="text-xl font-semibold">
-                    {selectedStudentDetails.attempt_info.student_name} - Detailed Results
+                    {selectedStudentDetails ? selectedStudentDetails.attempt_info.student_name : 'Loading...'} - Detailed Results
                   </h2>
                   <p className="text-sm text-gray-500">
-                    {selectedStudentDetails.attempt_info.exam_title} • {selectedStudentDetails.attempt_info.session_name}
+                    {selectedStudentDetails ? 
+                      `${selectedStudentDetails.attempt_info.exam_title} • ${selectedStudentDetails.attempt_info.session_name}` 
+                      : 'Loading student details...'}
                   </p>
                 </div>
                 <MagneticButton
@@ -527,106 +535,117 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
               </div>
 
               <div className="overflow-y-auto max-h-[calc(90vh-120px)]">
-                <div className="p-6 space-y-6">
-                  {/* Summary */}
-                  <div className="grid grid-cols-4 gap-4">
-                  <Card key="summary-score">
-                  <CardContent className="p-4 text-center">
-                  <div className="text-2xl font-bold text-blue-600">
-                  {selectedStudentDetails.attempt_info.percentage_score.toFixed(1)}%
+                {!selectedStudentDetails ? (
+                  <div className="p-12 text-center">
+                    <motion.div
+                      animate={{ rotate: 360 }}
+                      transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+                      className="w-8 h-8 border-2 border-indigo-600 border-t-transparent rounded-full mx-auto mb-4"
+                    />
+                    <p className="text-gray-600">Loading detailed results...</p>
                   </div>
-                  <div className="text-sm text-gray-500">Final Score</div>
-                  </CardContent>
-                  </Card>
-                  <Card key="summary-correct">
-                  <CardContent className="p-4 text-center">
-                  <div className="text-2xl font-bold text-green-600">
-                  {selectedStudentDetails.attempt_info.correct_answers}
-                  </div>
-                  <div className="text-sm text-gray-500">Correct</div>
-                  </CardContent>
-                  </Card>
-                  <Card key="summary-incorrect">
-                  <CardContent className="p-4 text-center">
-                  <div className="text-2xl font-bold text-orange-600">
-                  {selectedStudentDetails.attempt_info.total_questions - selectedStudentDetails.attempt_info.correct_answers}
-                  </div>
-                  <div className="text-sm text-gray-500">Incorrect</div>
-                  </CardContent>
-                  </Card>
-                  <Card key="summary-points">
-                  <CardContent className="p-4 text-center">
-                  <div className="text-2xl font-bold">
-                  {selectedStudentDetails.attempt_info.points_earned}/{selectedStudentDetails.attempt_info.total_points}
-                  </div>
-                  <div className="text-sm text-gray-500">Points</div>
-                  </CardContent>
-                  </Card>
-                  </div>
+                ) : (
+                  <div className="p-6 space-y-6">
+                    {/* Summary */}
+                    <div className="grid grid-cols-4 gap-4">
+                    <Card key="summary-score">
+                    <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-blue-600">
+                    {selectedStudentDetails.attempt_info.percentage_score.toFixed(1)}%
+                    </div>
+                    <div className="text-sm text-gray-500">Final Score</div>
+                    </CardContent>
+                    </Card>
+                    <Card key="summary-correct">
+                    <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-green-600">
+                    {selectedStudentDetails.attempt_info.correct_answers}
+                    </div>
+                    <div className="text-sm text-gray-500">Correct</div>
+                    </CardContent>
+                    </Card>
+                    <Card key="summary-incorrect">
+                    <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold text-orange-600">
+                    {selectedStudentDetails.attempt_info.total_questions - selectedStudentDetails.attempt_info.correct_answers}
+                    </div>
+                    <div className="text-sm text-gray-500">Incorrect</div>
+                    </CardContent>
+                    </Card>
+                    <Card key="summary-points">
+                    <CardContent className="p-4 text-center">
+                    <div className="text-2xl font-bold">
+                    {selectedStudentDetails.attempt_info.points_earned}/{selectedStudentDetails.attempt_info.total_points}
+                    </div>
+                    <div className="text-sm text-gray-500">Points</div>
+                    </CardContent>
+                    </Card>
+                    </div>
 
-                  {/* Questions */}
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold">Question-by-Question Breakdown</h3>
-                    {selectedStudentDetails.detailed_answers.map((answer, index) => (
-                    <Card key={`${selectedStudentDetails.attempt_info.attempt_id}-question-${answer.question_id}-${index}`} className="overflow-hidden">
-                        <CardContent className="p-4">
-                          <div className="flex items-start justify-between mb-3">
-                            <h4 className="font-medium">Question {answer.question_number}</h4>
-                            <div className="flex items-center space-x-2">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                answer.is_correct 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : 'bg-red-100 text-red-800'
-                              }`}>
-                                {answer.is_correct ? (
-                                  <>
-                                    <CheckCircle className="w-3 h-3 mr-1" />
-                                    Correct
-                                  </>
-                                ) : (
-                                  <>
-                                    <XCircle className="w-3 h-3 mr-1" />
-                                    Incorrect
-                                  </>
-                                )}
-                              </span>
-                              <span className="text-sm text-gray-500">
-                                {answer.points_earned}/{answer.question_points} pts
-                              </span>
-                            </div>
-                          </div>
-
-                          <p className="text-sm mb-4 p-3 bg-gray-50 rounded">
-                            {answer.question_text}
-                          </p>
-
-                          <div className="space-y-2 text-sm">
-                            <div className="flex items-start space-x-2">
-                              <span className="font-medium min-w-fit">Student Answer:</span>
-                              <span className={answer.is_correct ? 'text-green-600' : 'text-red-600'}>
-                                {answer.student_answer_text}
-                              </span>
+                    {/* Questions */}
+                    <div className="space-y-4">
+                      <h3 className="text-lg font-semibold">Question-by-Question Breakdown</h3>
+                      {selectedStudentDetails.detailed_answers.map((answer, index) => (
+                      <Card key={`${selectedStudentDetails.attempt_info.attempt_id}-question-${answer.question_id}-${index}`} className="overflow-hidden">
+                          <CardContent className="p-4">
+                            <div className="flex items-start justify-between mb-3">
+                              <h4 className="font-medium">Question {answer.question_number}</h4>
+                              <div className="flex items-center space-x-2">
+                                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                  answer.is_correct 
+                                    ? 'bg-green-100 text-green-800' 
+                                    : 'bg-red-100 text-red-800'
+                                }`}>
+                                  {answer.is_correct ? (
+                                    <>
+                                      <CheckCircle className="w-3 h-3 mr-1" />
+                                      Correct
+                                    </>
+                                  ) : (
+                                    <>
+                                      <XCircle className="w-3 h-3 mr-1" />
+                                      Incorrect
+                                    </>
+                                  )}
+                                </span>
+                                <span className="text-sm text-gray-500">
+                                  {answer.points_earned}/{answer.question_points} pts
+                                </span>
+                              </div>
                             </div>
 
-                            {!answer.is_correct && (
-                              <div className="flex items-start space-x-2">
-                                <span className="font-medium min-w-fit">Correct Answer:</span>
-                                <span className="text-green-600">{answer.correct_answer_text}</span>
-                              </div>
-                            )}
+                            <p className="text-sm mb-4 p-3 bg-gray-50 rounded">
+                              {answer.question_text}
+                            </p>
 
-                            {answer.explanation && (
+                            <div className="space-y-2 text-sm">
                               <div className="flex items-start space-x-2">
-                                <span className="font-medium min-w-fit">Explanation:</span>
-                                <span className="text-gray-600">{answer.explanation}</span>
+                                <span className="font-medium min-w-fit">Student Answer:</span>
+                                <span className={answer.is_correct ? 'text-green-600' : 'text-red-600'}>
+                                  {answer.student_answer_text}
+                                </span>
                               </div>
-                            )}
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))}
+
+                              {!answer.is_correct && (
+                                <div className="flex items-start space-x-2">
+                                  <span className="font-medium min-w-fit">Correct Answer:</span>
+                                  <span className="text-green-600">{answer.correct_answer_text}</span>
+                                </div>
+                              )}
+
+                              {answer.explanation && (
+                                <div className="flex items-start space-x-2">
+                                  <span className="font-medium min-w-fit">Explanation:</span>
+                                  <span className="text-gray-600">{answer.explanation}</span>
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </motion.div>
           </motion.div>
