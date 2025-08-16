@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { ExamSession } from '@/types/database-v2'
-import { getDetailedStudentResults, DetailedStudentResult } from '@/lib/auto-scoring'
+import { DetailedStudentResult } from '@/lib/auto-scoring'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MagneticButton } from '@/components/ui/magnetic-button'
 import { 
@@ -55,16 +55,7 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
     lowestScore: 0
   })
 
-  useEffect(() => {
-    fetchSessionResults()
-    
-    // Set up auto-refresh every 10 seconds for real-time updates
-    const refreshInterval = setInterval(() => fetchSessionResults(true), 10000)
-    
-    return () => clearInterval(refreshInterval)
-  }, [session.id])
-
-  const fetchSessionResults = async (isRefresh = false) => {
+  const fetchSessionResults = useCallback(async (isRefresh = false) => {
     try {
       if (isRefresh) {
         setRefreshing(true)
@@ -173,7 +164,16 @@ export default function SessionResults({ session, onClose }: SessionResultsProps
       setLoading(false)
       setRefreshing(false)
     }
-  }
+  }, [session.id])
+
+  useEffect(() => {
+    fetchSessionResults()
+    
+    // Set up auto-refresh every 10 seconds for real-time updates
+    const refreshInterval = setInterval(() => fetchSessionResults(true), 10000)
+    
+    return () => clearInterval(refreshInterval)
+  }, [session.id, fetchSessionResults])
 
   const exportResults = () => {
     const csvContent = [

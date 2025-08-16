@@ -1,4 +1,4 @@
--- Function to get detailed student exam results with full question and answer text
+-- Update the get_detailed_student_results function to include student class and session code
 CREATE OR REPLACE FUNCTION public.get_detailed_student_results(p_attempt_id UUID)
 RETURNS JSONB AS $$
 DECLARE
@@ -6,7 +6,7 @@ DECLARE
   v_attempt_info JSONB;
   v_detailed_answers JSONB;
 BEGIN
-  -- Get basic attempt and result information
+  -- Get basic attempt and result information with student class and session code
   SELECT jsonb_build_object(
     'attempt_id', sea.id,
     'student_id', sea.student_id,
@@ -105,6 +105,3 @@ BEGIN
   RETURN v_result;
 END;
 $$ LANGUAGE plpgsql;
-
--- Example usage:
--- SELECT public.get_detailed_student_results('your-attempt-id-here');

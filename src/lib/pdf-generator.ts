@@ -1,6 +1,7 @@
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import { ExamResult, Exam, StudentExamAttempt } from '@/types/database-v2'
+import { getDetailedStudentResults } from '@/lib/auto-scoring'
 
 interface GeneratePDFOptions {
   exam: Exam
@@ -13,116 +14,131 @@ interface GeneratePDFOptions {
 export const generateResultsPDF = async (options: GeneratePDFOptions) => {
   const { exam, attempt, result, studentName, sessionCode } = options
 
-  // Create a new jsPDF instance
-  const pdf = new jsPDF()
-  const pageWidth = pdf.internal.pageSize.getWidth()
-  const pageHeight = pdf.internal.pageSize.getHeight()
-  
-  // Set up fonts and colors
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(24)
-  
-  // Header
-  pdf.setTextColor(59, 130, 246) // Blue color
-  pdf.text('YANO Exam Platform', pageWidth / 2, 30, { align: 'center' })
-  
-  pdf.setFontSize(18)
-  pdf.setTextColor(0, 0, 0)
-  pdf.text('Exam Results Certificate', pageWidth / 2, 45, { align: 'center' })
-  
-  // Divider line
-  pdf.setLineWidth(0.5)
-  pdf.line(20, 55, pageWidth - 20, 55)
-  
-  // Student Information
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(12)
-  pdf.text('Student Information:', 20, 75)
-  
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(10)
-  pdf.text(`Name: ${studentName}`, 30, 85)
-  pdf.text(`Session Code: ${sessionCode}`, 30, 95)
-  pdf.text(`Date: ${new Date().toLocaleDateString()}`, 30, 105)
-  
-  // Exam Information
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(12)
-  pdf.text('Exam Information:', 20, 125)
-  
-  pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(10)
-  pdf.text(`Exam Title: ${exam.title}`, 30, 135)
-  pdf.text(`Duration: ${exam.duration_minutes} minutes`, 30, 145)
-  pdf.text(`Started: ${new Date(attempt.started_at!).toLocaleString()}`, 30, 155)
-  pdf.text(`Completed: ${new Date(attempt.completed_at!).toLocaleString()}`, 30, 165)
-  
-  // Results Section
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(14)
-  
-  // Pass/Fail status with color
-  if (result.passed) {
-    pdf.setTextColor(34, 197, 94) // Green
-    pdf.text('PASSED', pageWidth / 2, 190, { align: 'center' })
-  } else {
-    pdf.setTextColor(239, 68, 68) // Red
-    pdf.text('FAILED', pageWidth / 2, 190, { align: 'center' })
+  try {
+    // Get detailed results for question-by-question breakdown
+    const detailedResults = await getDetailedStudentResults(attempt.id)
+    
+    // Create a new jsPDF instance
+    const pdf = new jsPDF()
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    const pageHeight = pdf.internal.pageSize.getHeight()
+    
+    // Set up fonts and colors
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(20)
+    
+    // Header
+    pdf.setTextColor(0, 0, 0)
+    pdf.text('EXAM RESULTS', pageWidth / 2, 30, { align: 'center' })
+    
+    // Divider line
+    pdf.setLineWidth(0.5)
+    pdf.line(20, 40, pageWidth - 20, 40)
+    
+    // Student Information Section
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(12)
+    pdf.text('STUDENT INFORMATION', 20, 60)
+    
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(10)
+    pdf.text(`Name: ${studentName}`, 20, 75)
+    pdf.text(`Student ID: ${detailedResults?.attempt_info?.student_school_id || 'N/A'}`, 20, 85)
+    pdf.text(`Class: ${detailedResults?.attempt_info?.student_class || 'N/A'}`, 20, 95)
+    
+    // Exam Information Section
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(12)
+    pdf.text('EXAM INFORMATION', 20, 115)
+    
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(10)
+    pdf.text(`Exam: ${exam.title}`, 20, 130)
+    pdf.text(`Session Code: ${detailedResults?.attempt_info?.session_code || sessionCode}`, 20, 140)
+    pdf.text(`Score: ${result.correct_answers}/${result.total_questions}`, 20, 150)
+    pdf.text(`Percentage: ${result.percentage_score.toFixed(1)}%`, 20, 160)
+    pdf.text(`Status: ${result.passed ? 'PASSED' : 'FAILED'}`, 20, 170)
+    pdf.text(`Date: ${new Date(result.created_at).toLocaleDateString()}`, 20, 180)
+    
+    // Detailed Results Section
+    if (detailedResults?.success && detailedResults.detailed_answers?.length > 0) {
+      pdf.setFont('helvetica', 'bold')
+      pdf.setFontSize(12)
+      pdf.text('DETAILED RESULTS', 20, 200)
+      
+      let currentY = 215
+      const lineHeight = 8
+      const questionSpacing = 25
+      
+      for (let i = 0; i < detailedResults.detailed_answers.length; i++) {
+        const answer = detailedResults.detailed_answers[i]
+        
+        // Check if we need a new page
+        if (currentY + questionSpacing > pageHeight - 30) {
+          pdf.addPage()
+          currentY = 30
+        }
+        
+        // Question header
+        pdf.setFont('helvetica', 'bold')
+        pdf.setFontSize(10)
+        pdf.text(`Question ${i + 1}: ${answer.is_correct ? 'CORRECT' : 'INCORRECT'}`, 20, currentY)
+        currentY += lineHeight
+        
+        // Question text (truncated if too long)
+        pdf.setFont('helvetica', 'normal')
+        pdf.setFontSize(9)
+        const questionText = answer.question_text.length > 80 
+          ? answer.question_text.substring(0, 80) + '...' 
+          : answer.question_text
+        pdf.text(`Q: ${questionText}`, 25, currentY)
+        currentY += lineHeight
+        
+        // Student answer
+        pdf.text(`Your Answer: ${answer.student_answer_text || 'Not answered'}`, 25, currentY)
+        currentY += lineHeight
+        
+        // Correct answer if student was wrong
+        if (!answer.is_correct) {
+          pdf.text(`Correct Answer: ${answer.correct_answer_text}`, 25, currentY)
+          currentY += lineHeight
+        }
+        
+        // Points
+        pdf.text(`Points: ${answer.points_earned}/${answer.question_points}`, 25, currentY)
+        currentY += questionSpacing
+      }
+    }
+    
+    // Footer
+    const footerY = pdf.internal.pageSize.getHeight() - 20
+    pdf.setFontSize(8)
+    pdf.setTextColor(100, 100, 100)
+    pdf.text('This document was generated by YANO Exam Platform', pageWidth / 2, footerY, { align: 'center' })
+    pdf.text(`Generated on ${new Date().toLocaleString()}`, pageWidth / 2, footerY + 10, { align: 'center' })
+    
+    return pdf
+  } catch (error) {
+    console.error('Error generating detailed PDF:', error)
+    
+    // Fallback to simple PDF if detailed results fail
+    const pdf = new jsPDF()
+    const pageWidth = pdf.internal.pageSize.getWidth()
+    
+    pdf.setFont('helvetica', 'bold')
+    pdf.setFontSize(20)
+    pdf.setTextColor(0, 0, 0)
+    pdf.text('EXAM RESULTS', pageWidth / 2, 30, { align: 'center' })
+    
+    pdf.setFont('helvetica', 'normal')
+    pdf.setFontSize(12)
+    pdf.text(`Student: ${studentName}`, 20, 60)
+    pdf.text(`Exam: ${exam.title}`, 20, 75)
+    pdf.text(`Score: ${result.percentage_score.toFixed(1)}%`, 20, 90)
+    pdf.text(`Status: ${result.passed ? 'PASSED' : 'FAILED'}`, 20, 105)
+    
+    return pdf
   }
-  
-  // Score
-  pdf.setTextColor(0, 0, 0)
-  pdf.setFontSize(24)
-  pdf.text(`${result.percentage_score.toFixed(1)}%`, pageWidth / 2, 210, { align: 'center' })
-  
-  pdf.setFontSize(10)
-  pdf.text(`(${result.points_earned} out of ${result.total_points} points)`, pageWidth / 2, 220, { align: 'center' })
-  
-  // Score Breakdown Table
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(12)
-  pdf.text('Score Breakdown:', 20, 245)
-  
-  // Table headers
-  const tableStartY = 255
-  const colWidth = (pageWidth - 40) / 4
-  
-  pdf.setFont('helvetica', 'bold')
-  pdf.setFontSize(9)
-  pdf.rect(20, tableStartY, colWidth, 15)
-  pdf.text('Correct Answers', 20 + colWidth/2, tableStartY + 10, { align: 'center' })
-  
-  pdf.rect(20 + colWidth, tableStartY, colWidth, 15)
-  pdf.text('Total Questions', 20 + colWidth + colWidth/2, tableStartY + 10, { align: 'center' })
-  
-  pdf.rect(20 + 2*colWidth, tableStartY, colWidth, 15)
-  pdf.text('Points Earned', 20 + 2*colWidth + colWidth/2, tableStartY + 10, { align: 'center' })
-  
-  pdf.rect(20 + 3*colWidth, tableStartY, colWidth, 15)
-  pdf.text('Total Points', 20 + 3*colWidth + colWidth/2, tableStartY + 10, { align: 'center' })
-  
-  // Table data
-  pdf.setFont('helvetica', 'normal')
-  pdf.rect(20, tableStartY + 15, colWidth, 15)
-  pdf.text(result.correct_answers.toString(), 20 + colWidth/2, tableStartY + 25, { align: 'center' })
-  
-  pdf.rect(20 + colWidth, tableStartY + 15, colWidth, 15)
-  pdf.text(result.total_questions.toString(), 20 + colWidth + colWidth/2, tableStartY + 25, { align: 'center' })
-  
-  pdf.rect(20 + 2*colWidth, tableStartY + 15, colWidth, 15)
-  pdf.text(result.points_earned.toString(), 20 + 2*colWidth + colWidth/2, tableStartY + 25, { align: 'center' })
-  
-  pdf.rect(20 + 3*colWidth, tableStartY + 15, colWidth, 15)
-  pdf.text(result.total_points.toString(), 20 + 3*colWidth + colWidth/2, tableStartY + 25, { align: 'center' })
-  
-  // Footer
-  const footerY = pageHeight - 30
-  pdf.setFontSize(8)
-  pdf.setTextColor(100, 100, 100)
-  pdf.text('This document was generated by YANO Exam Platform', pageWidth / 2, footerY, { align: 'center' })
-  pdf.text(`Generated on ${new Date().toLocaleString()}`, pageWidth / 2, footerY + 10, { align: 'center' })
-  
-  return pdf
 }
 
 export const downloadPDF = (pdf: jsPDF, filename: string) => {

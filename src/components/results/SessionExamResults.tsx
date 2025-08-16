@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSession } from '@/context/SimpleSessionContext'
-import { supabase } from '@/lib/supabase'
+
 import { Exam, Question, StudentExamAttempt, StudentAnswer, ExamResult } from '@/types/database-v2'
-import { getDetailedStudentResults, DetailedStudentResult, DetailedAnswer } from '@/lib/auto-scoring'
+import { getDetailedStudentResults, DetailedStudentResult } from '@/lib/auto-scoring'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -15,7 +15,7 @@ import { Award, Download, Eye, EyeOff, CheckCircle, XCircle, Clock, User, FileTe
 import ResultsBlocked from './ResultsBlocked'
 import { generateResultsPDF, downloadPDF } from '@/lib/pdf-generator'
 import toast from 'react-hot-toast'
-import Link from 'next/link'
+
 
 interface SessionExamResultsProps {
   attemptId: string
@@ -28,7 +28,7 @@ interface QuestionWithAnswer extends Question {
 
 export default function SessionExamResults({ attemptId }: SessionExamResultsProps) {
   const router = useRouter()
-  const { session, clearSession } = useSession()
+  const {} = useSession()
   const [exam, setExam] = useState<Exam | null>(null)
   const [attempt, setAttempt] = useState<StudentExamAttempt | null>(null)
   const [result, setResult] = useState<ExamResult | null>(null)
@@ -43,10 +43,6 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
   const [autoReturnCountdown, setAutoReturnCountdown] = useState(30)
   const [autoReturnActive, setAutoReturnActive] = useState(true)
   const countdownIntervalRef = useRef<NodeJS.Timeout | null>(null)
-
-  useEffect(() => {
-    loadResults()
-  }, [attemptId])
 
   // Auto-return countdown
   useEffect(() => {
@@ -85,7 +81,7 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
     router.push('/dashboard')
   }
 
-  const loadResults = async () => {
+  const loadResults = useCallback(async () => {
     try {
       setLoading(true)
 
@@ -122,12 +118,14 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
       setStudentInfo({
         id: attemptInfo.student_id,
         name: attemptInfo.student_name,
+        full_name: attemptInfo.student_name,
         email: attemptInfo.student_email
       })
 
       setSessionInfo({
         id: attemptInfo.session_id,
-        session_name: attemptInfo.session_name
+        session_name: attemptInfo.session_name,
+        session_code: attemptInfo.session_code
       })
 
       // Set result from detailed results
@@ -179,138 +177,15 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
     } finally {
       setLoading(false)
     }
-  }
+  }, [attemptId])
 
-  const loadQuestionsWithAnswers = async (examId: string, attemptId: string) => {
-    try {
-      // Fetch questions
-      const { data: questionsData, error: questionsError } = await supabase
-        .from('questions')
-        .select('*')
-        .eq('exam_id', examId)
-        .order('created_at')
+  useEffect(() => {
+    loadResults()
+  }, [loadResults])
 
-      if (questionsError) throw questionsError
 
-      // Fetch user answers
-      const { data: answersData, error: answersError } = await supabase
-        .from('student_answers')
-        .select('*')
-        .eq('attempt_id', attemptId)
 
-      if (answersError) throw answersError
 
-      // Combine questions with answers
-      const questionsWithAnswers: QuestionWithAnswer[] = questionsData.map(question => {
-        const userAnswer = answersData.find(answer => answer.question_id === question.id)
-        const isCorrect = userAnswer ? (userAnswer.is_correct || false) : false
-
-        return {
-          ...question,
-          userAnswer,
-          isCorrect
-        }
-      })
-
-      setQuestions(questionsWithAnswers)
-    } catch (err) {
-      console.error('Error loading questions with answers:', err)
-    }
-  }
-
-  const calculateResults = async (attempt: StudentExamAttempt, exam: Exam) => {
-    try {
-      // Fetch all questions and answers for this attempt
-      const { data: questionsData, error: questionsError } = await supabase
-        .from('questions')
-        .select('*')
-        .eq('exam_id', exam.id)
-
-      if (questionsError) throw questionsError
-
-      const { data: answersData, error: answersError } = await supabase
-        .from('student_answers')
-        .select('*')
-        .eq('attempt_id', attempt.id)
-
-      if (answersError) throw answersError
-
-      // Calculate scores
-      let correctAnswers = 0
-      let totalPoints = 0
-      let pointsEarned = 0
-
-      const updatedAnswers = []
-
-      for (const question of questionsData) {
-        const userAnswer = answersData.find(answer => answer.question_id === question.id)
-        totalPoints += question.points
-
-        if (userAnswer) {
-          // Use the already calculated is_correct value, or calculate if not available
-          const isCorrect = userAnswer.is_correct !== null ? userAnswer.is_correct : (userAnswer.answer === question.correct_answer)
-          const points = isCorrect ? question.points : 0
-
-          if (isCorrect) correctAnswers++
-          pointsEarned += points
-
-          // Update answer with correctness and points only if not already set
-          if (userAnswer.is_correct === null) {
-            updatedAnswers.push({
-              id: userAnswer.id,
-              is_correct: isCorrect,
-              points_earned: points
-            })
-          }
-        }
-      }
-
-      // Update student answers with correctness and points
-      for (const answer of updatedAnswers) {
-        await supabase
-          .from('student_answers')
-          .update({
-            is_correct: answer.is_correct,
-            points_earned: answer.points_earned
-          })
-          .eq('id', answer.id)
-      }
-
-      const percentageScore = totalPoints > 0 ? (pointsEarned / totalPoints) * 100 : 0
-      const passed = percentageScore >= exam.passing_score
-
-      // Save exam result with UPSERT to handle duplicates (hidden from students by default)
-      const { data: resultData, error: resultError } = await supabase
-        .from('exam_results')
-        .upsert([{
-          attempt_id: attempt.id,
-          student_id: attempt.student_id,
-          session_id: attempt.session_id,
-          exam_id: exam.id,
-          total_questions: questionsData.length,
-          correct_answers: correctAnswers,
-          total_points: totalPoints,
-          points_earned: pointsEarned,
-          percentage_score: percentageScore,
-          passed: passed,
-          results_visible_to_student: false, // Hidden by default
-          teacher_can_email_results: true
-        }], {
-          onConflict: 'attempt_id'
-        })
-        .select()
-        .single()
-
-      if (resultError) throw resultError
-
-      setResult(resultData)
-      await loadQuestionsWithAnswers(exam.id, attempt.id)
-
-    } catch (err: unknown) {
-      console.error('Error calculating results:', err)
-      setError(err instanceof Error ? err.message : 'Failed to calculate results')
-    }
-  }
 
   const handleDownloadPDF = async () => {
     if (!exam || !attempt || !result || !studentInfo || !sessionInfo) return
@@ -444,7 +319,7 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
   const correctPercentage = (result.correct_answers / result.total_questions) * 100
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50">
+    <div className="min-h-screen bg-gray-50">
       {/* Auto-return notification */}
       <AnimatePresence>
         {autoReturnActive && !loading && !error && (
@@ -454,15 +329,11 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
             exit={{ opacity: 0, y: -50 }}
             className="fixed top-4 left-1/2 transform -translate-x-1/2 z-50 w-full max-w-md px-4"
           >
-            <Card className="border-0 shadow-xl bg-white/95 backdrop-blur-md">
+            <Card className="border shadow-lg bg-white">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-3">
-                    <motion.div
-                      animate={{ scale: [1, 1.1, 1] }}
-                      transition={{ duration: 1, repeat: Infinity }}
-                      className="w-3 h-3 bg-blue-500 rounded-full"
-                    />
+                    <div className="w-3 h-3 bg-gray-400 rounded-full" />
                     <div>
                       <p className="text-sm font-medium text-gray-900">
                         Auto-returning to dashboard in {autoReturnCountdown}s
@@ -502,23 +373,18 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
         )}
       </AnimatePresence>
 
-      {/* Animated Header */}
+      {/* Header */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-white/80 backdrop-blur-md shadow-lg border-b border-border sticky top-0 z-50"
+        className="bg-white shadow border-b sticky top-0 z-50"
       >
         <div className="max-w-7xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <div className="flex items-center space-x-4">
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.2 }}
-                className="w-10 h-10 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center"
-              >
+              <div className="w-10 h-10 bg-gray-800 rounded-full flex items-center justify-center">
                 <Award className="w-5 h-5 text-white" />
-              </motion.div>
+              </div>
               <div>
                 <h1 className="text-xl font-bold text-foreground">Exam Results</h1>
                 <div className="flex items-center space-x-4 text-sm text-muted-foreground">
@@ -538,7 +404,7 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
               <Button
                 onClick={handleDownloadPDF}
                 disabled={downloadingPDF}
-                className="bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
+                className="bg-gray-800 hover:bg-gray-700"
               >
                 {downloadingPDF ? (
                   <motion.div
@@ -560,76 +426,84 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Main Results Card */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Student Information Card */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              <Card className="border shadow-lg bg-white">
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <User className="w-5 h-5" />
+                    <span>Student Information</span>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-sm font-medium text-gray-700">Name</div>
+                      <div className="text-lg font-semibold">{studentInfo?.full_name || 'Unknown Student'}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-700">Student ID</div>
+                      <div className="text-sm text-gray-600">{detailedResult?.attempt_info?.student_school_id || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-700">Class</div>
+                      <div className="text-sm text-gray-600">{detailedResult?.attempt_info?.student_class || 'N/A'}</div>
+                    </div>
+                    <div>
+                      <div className="text-sm font-medium text-gray-700">Session Code</div>
+                      <div className="text-sm text-gray-600 font-mono">{sessionInfo?.session_code || 'Unknown Session'}</div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
             {/* Pass/Fail Header */}
             <motion.div
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               transition={{ delay: 0.2 }}
             >
-              <Card className="border-0 shadow-xl bg-white/90 backdrop-blur overflow-hidden">
-                <div className={`h-2 ${result.passed ? 'bg-gradient-to-r from-green-400 to-emerald-500' : 'bg-gradient-to-r from-red-400 to-orange-500'}`} />
+              <Card className="border shadow-lg bg-white">
+                <div className={`h-1 ${result.passed ? 'bg-green-500' : 'bg-red-500'}`} />
                 <CardContent className="p-8 text-center">
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: 0.4, type: "spring", stiffness: 200 }}
-                    className={`mx-auto w-20 h-20 rounded-full flex items-center justify-center mb-6 ${
-                      result.passed 
-                        ? 'bg-gradient-to-r from-green-100 to-emerald-100' 
-                        : 'bg-gradient-to-r from-red-100 to-orange-100'
-                    }`}
-                  >
+                  <div className={`mx-auto w-16 h-16 rounded-full flex items-center justify-center mb-6 ${
+                    result.passed ? 'bg-green-50' : 'bg-red-50'
+                  }`}>
                     {result.passed ? (
-                      <CheckCircle className="w-10 h-10 text-green-600" />
+                      <CheckCircle className="w-8 h-8 text-green-600" />
                     ) : (
-                      <XCircle className="w-10 h-10 text-red-600" />
+                      <XCircle className="w-8 h-8 text-red-600" />
                     )}
-                  </motion.div>
+                  </div>
                   
-                  <motion.h1
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.6 }}
-                    className="text-3xl font-bold mb-2"
-                  >
-                    {result.passed ? '🎉 Congratulations!' : '💪 Keep Trying!'}
-                  </motion.h1>
+                  <h1 className="text-2xl font-bold mb-2">
+                    {result.passed ? 'Congratulations!' : 'Keep Trying!'}
+                  </h1>
                   
-                  <motion.p
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.7 }}
-                    className="text-lg text-muted-foreground mb-6"
-                  >
+                  <p className="text-lg text-muted-foreground mb-6">
                     {exam.title}
-                  </motion.p>
+                  </p>
                   
-                  <motion.div
-                    initial={{ scale: 0 }}
-                    animate={{ scale: 1 }}
-                    transition={{ delay: 0.8, type: "spring" }}
-                    className="relative mb-4"
-                  >
-                    <div className="text-6xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                  <div className="relative mb-4">
+                    <div className="text-5xl font-bold text-gray-800">
                       {result.percentage_score.toFixed(1)}%
                     </div>
                     <Progress 
                       value={scorePercentage} 
-                      className="mt-4 h-3"
+                      className="mt-4 h-2"
                     />
-                  </motion.div>
+                  </div>
                   
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: 0.9 }}
-                    className="text-sm text-muted-foreground"
-                  >
+                  <p className="text-sm text-muted-foreground">
                     {result.passed 
                       ? `Great job! You exceeded the ${exam.passing_score}% passing requirement.` 
                       : `You needed ${exam.passing_score}% to pass. You got ${result.percentage_score.toFixed(1)}%.`
                     }
-                  </motion.p>
+                  </p>
                 </CardContent>
               </Card>
             </motion.div>
@@ -640,7 +514,7 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
             >
-              <Card className="border-0 shadow-xl bg-white/90 backdrop-blur">
+              <Card className="border shadow-lg bg-white">
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <Target className="w-5 h-5" />
@@ -649,37 +523,25 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <motion.div
-                      whileHover={{ scale: 1.05 }}
-                      className="text-center p-4 bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl border border-green-200"
-                    >
-                      <div className="text-2xl font-bold text-green-600 mb-1">{result.correct_answers}</div>
-                      <div className="text-xs text-green-600 font-medium">Correct</div>
-                    </motion.div>
+                    <div className="text-center p-4 bg-gray-50 rounded-lg border">
+                      <div className="text-2xl font-bold text-gray-800 mb-1">{result.correct_answers}</div>
+                      <div className="text-xs text-gray-600 font-medium">Correct</div>
+                    </div>
                     
-                    <motion.div
-                      whileHover={{ scale: 1.05 }}
-                      className="text-center p-4 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl border border-blue-200"
-                    >
-                      <div className="text-2xl font-bold text-blue-600 mb-1">{result.total_questions}</div>
-                      <div className="text-xs text-blue-600 font-medium">Total Questions</div>
-                    </motion.div>
+                    <div className="text-center p-4 bg-gray-50 rounded-lg border">
+                      <div className="text-2xl font-bold text-gray-800 mb-1">{result.total_questions}</div>
+                      <div className="text-xs text-gray-600 font-medium">Total Questions</div>
+                    </div>
                     
-                    <motion.div
-                      whileHover={{ scale: 1.05 }}
-                      className="text-center p-4 bg-gradient-to-br from-purple-50 to-violet-50 rounded-xl border border-purple-200"
-                    >
-                      <div className="text-2xl font-bold text-purple-600 mb-1">{result.points_earned}</div>
-                      <div className="text-xs text-purple-600 font-medium">Points Earned</div>
-                    </motion.div>
+                    <div className="text-center p-4 bg-gray-50 rounded-lg border">
+                      <div className="text-2xl font-bold text-gray-800 mb-1">{result.points_earned}</div>
+                      <div className="text-xs text-gray-600 font-medium">Points Earned</div>
+                    </div>
                     
-                    <motion.div
-                      whileHover={{ scale: 1.05 }}
-                      className="text-center p-4 bg-gradient-to-br from-orange-50 to-red-50 rounded-xl border border-orange-200"
-                    >
-                      <div className="text-2xl font-bold text-orange-600 mb-1">{result.total_points}</div>
-                      <div className="text-xs text-orange-600 font-medium">Total Points</div>
-                    </motion.div>
+                    <div className="text-center p-4 bg-gray-50 rounded-lg border">
+                      <div className="text-2xl font-bold text-gray-800 mb-1">{result.total_points}</div>
+                      <div className="text-xs text-gray-600 font-medium">Total Points</div>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -691,7 +553,7 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.6 }}
             >
-              <Card className="border-0 shadow-xl bg-white/90 backdrop-blur">
+              <Card className="border shadow-lg bg-white">
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <CardTitle className="flex items-center space-x-2">
@@ -804,7 +666,7 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
               animate={{ opacity: 1, x: 0 }}
               transition={{ delay: 0.8 }}
             >
-              <Card className="border-0 shadow-xl bg-white/90 backdrop-blur sticky top-32">
+              <Card className="border shadow-lg bg-white sticky top-32">
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <Clock className="w-5 h-5" />
@@ -812,31 +674,31 @@ export default function SessionExamResults({ attemptId }: SessionExamResultsProp
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <div className="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
-                    <Calendar className="w-4 h-4 text-blue-600" />
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <Calendar className="w-4 h-4 text-gray-600" />
                     <div>
-                      <div className="text-xs font-medium text-blue-600">Started</div>
-                      <div className="text-xs text-blue-700">
+                      <div className="text-xs font-medium text-gray-700">Started</div>
+                      <div className="text-xs text-gray-600">
                         {new Date(attempt.started_at!).toLocaleString()}
                       </div>
                     </div>
                   </div>
                   
-                  <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
-                    <CheckCircle className="w-4 h-4 text-green-600" />
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <CheckCircle className="w-4 h-4 text-gray-600" />
                     <div>
-                      <div className="text-xs font-medium text-green-600">Completed</div>
-                      <div className="text-xs text-green-700">
+                      <div className="text-xs font-medium text-gray-700">Completed</div>
+                      <div className="text-xs text-gray-600">
                         {new Date(attempt.completed_at!).toLocaleString()}
                       </div>
                     </div>
                   </div>
                   
-                  <div className="flex items-center space-x-3 p-3 bg-purple-50 rounded-lg">
-                    <Timer className="w-4 h-4 text-purple-600" />
+                  <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                    <Timer className="w-4 h-4 text-gray-600" />
                     <div>
-                      <div className="text-xs font-medium text-purple-600">Duration</div>
-                      <div className="text-xs text-purple-700">{exam.duration_minutes} minutes</div>
+                      <div className="text-xs font-medium text-gray-700">Duration</div>
+                      <div className="text-xs text-gray-600">{exam.duration_minutes} minutes</div>
                     </div>
                   </div>
 

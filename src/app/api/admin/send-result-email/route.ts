@@ -149,7 +149,7 @@ export async function POST(req: NextRequest) {
             For a complete question-by-question breakdown of your exam performance:
           </p>
           <a 
-            href="https://yano-exams-o6re.vercel.app/admin/results/${resultData.student_exam_attempts?.id || resultData.attempt_id}" 
+            href="https://yano-exams-o6re.vercel.app/results/${resultData.student_exam_attempts?.id || resultData.attempt_id}" 
             style="display: inline-block; padding: 10px 20px; background-color: #000; color: #fff; text-decoration: none; border: 1px solid #000;"
           >
             📄 View Detailed Results

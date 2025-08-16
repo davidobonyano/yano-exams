@@ -54,10 +54,13 @@ export interface DetailedStudentResult {
     student_id: string
     student_name: string
     student_email: string
+    student_class: string
+    student_school_id: string
     exam_id: string
     exam_title: string
     session_id: string
     session_name: string
+    session_code: string
     status: string
     started_at: string
     completed_at?: string
