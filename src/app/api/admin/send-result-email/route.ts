@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
 import nodemailer from 'nodemailer'
+import { generateResultsPDF } from '@/lib/pdf-generator'
+import { getDetailedStudentResults } from '@/lib/auto-scoring'
 
 export async function POST(req: NextRequest) {
   try {
@@ -85,6 +87,78 @@ export async function POST(req: NextRequest) {
       throw new Error('Gmail authentication failed. Please check credentials.')
     }
 
+    // Generate PDF attachment
+    console.log('Generating PDF attachment...')
+    const attemptId = resultData.student_exam_attempts?.id || resultData.attempt_id
+    
+    // Get detailed results for PDF
+    const detailedResults = await getDetailedStudentResults(attemptId)
+    
+    let pdfBuffer = null
+    let filename = `exam_results_${studentName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`
+    
+    if (detailedResults?.success) {
+      const attemptInfo = detailedResults.attempt_info
+      
+      // Create data objects for PDF generation
+      const exam = {
+        id: attemptInfo.exam_id,
+        title: attemptInfo.exam_title,
+        total_questions: attemptInfo.total_questions,
+        passing_score: attemptInfo.passing_score,
+        duration_minutes: 0,
+        class_level: 'primary_1',
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }
+
+      const attempt = {
+        id: attemptInfo.attempt_id,
+        student_id: attemptInfo.student_id,
+        exam_id: attemptInfo.exam_id,
+        session_id: attemptInfo.session_id,
+        status: attemptInfo.status,
+        started_at: attemptInfo.started_at,
+        completed_at: attemptInfo.completed_at,
+        submitted_at: attemptInfo.submitted_at,
+        is_paused: false,
+        created_at: new Date().toISOString()
+      }
+
+      const result = {
+        id: attemptInfo.attempt_id,
+        attempt_id: attemptInfo.attempt_id,
+        student_id: attemptInfo.student_id,
+        session_id: attemptInfo.session_id,
+        exam_id: attemptInfo.exam_id,
+        total_questions: attemptInfo.total_questions,
+        correct_answers: attemptInfo.correct_answers,
+        total_points: attemptInfo.total_points,
+        points_earned: attemptInfo.points_earned,
+        percentage_score: attemptInfo.percentage_score,
+        passed: attemptInfo.passed,
+        created_at: new Date().toISOString()
+      }
+
+      try {
+        const pdf = await generateResultsPDF({
+          exam: exam as any,
+          attempt: attempt as any,
+          result: result as any,
+          studentName: attemptInfo.student_name,
+          sessionCode: attemptInfo.session_code || resultData.exam_sessions.session_code
+        })
+
+        pdfBuffer = Buffer.from(pdf.output('arraybuffer'))
+        filename = `${exam.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_detailed_results_${studentName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`
+        console.log('PDF generated successfully for attachment')
+      } catch (pdfError) {
+        console.error('Error generating PDF:', pdfError)
+        // Continue without PDF attachment
+      }
+    }
+
     // Create email content
     const subject = `Exam Results - ${resultData.exams.title}`
     const htmlContent = `
@@ -143,17 +217,11 @@ export async function POST(req: NextRequest) {
           </tr>
         </table>
 
-        <div style="margin: 30px 0; padding: 20px;  text-align: center;">
+        <div style="margin: 30px 0; padding: 20px; text-align: center;">
           <h3 style="margin: 0 0 10px 0; color: #000;">DETAILED RESULTS</h3>
           <p style="margin: 0 0 15px 0; color: #000;">
-            For a complete question-by-question breakdown of your exam performance:
+            Your detailed question-by-question breakdown is attached as a PDF file to this email.
           </p>
-          <a 
-            href="https://yano-exams-o6re.vercel.app/results/${resultData.student_exam_attempts?.id || resultData.attempt_id}" 
-            style="display: inline-block; padding: 10px 20px; background-color: #000; color: #fff; text-decoration: none; border: 1px solid #000;"
-          >
-            📄 View Detailed Results
-          </a>
         </div>
 
         <hr style="border: none; height: 1px; background-color: #000; margin: 30px 0;">
@@ -164,14 +232,27 @@ export async function POST(req: NextRequest) {
       </div>
     `
 
-    // Send the email
-    console.log('Sending email to:', email)
-    const emailResult = await transporter.sendMail({
+    // Prepare email options
+    const emailOptions: nodemailer.SendMailOptions = {
       from: `"${process.env.SCHOOL_NAME || 'School'}" <${process.env.SCHOOL_GMAIL_USER}>`,
       to: email,
       subject,
       html: htmlContent,
-    })
+    }
+
+    // Add PDF attachment if generated successfully
+    if (pdfBuffer) {
+      emailOptions.attachments = [{
+        filename: filename,
+        content: pdfBuffer,
+        contentType: 'application/pdf'
+      }]
+      console.log('PDF attachment added to email')
+    }
+
+    // Send the email
+    console.log('Sending email to:', email)
+    const emailResult = await transporter.sendMail(emailOptions)
 
     console.log('Email sent successfully:', emailResult.messageId)
 
