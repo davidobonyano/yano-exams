@@ -6,9 +6,10 @@ interface TeacherVideoDisplayProps {
   stream: MediaStream
   studentId: string
   className?: string
+  soundEnabled?: boolean
 }
 
-export default function TeacherVideoDisplay({ stream, studentId, className }: TeacherVideoDisplayProps) {
+export default function TeacherVideoDisplay({ stream, studentId, className, soundEnabled = false }: TeacherVideoDisplayProps) {
   const videoRef = useRef<HTMLVideoElement>(null)
 
   useEffect(() => {
@@ -57,7 +58,7 @@ export default function TeacherVideoDisplay({ stream, studentId, className }: Te
       if (video.srcObject === null) {
         // Force set stream properties
         video.srcObject = stream
-        video.muted = true
+        video.muted = !soundEnabled
         video.autoplay = true
         video.playsInline = true
 
@@ -130,14 +131,23 @@ export default function TeacherVideoDisplay({ stream, studentId, className }: Te
     }
   }, [stream, studentId])
 
+  // Update audio when soundEnabled changes
+  useEffect(() => {
+    const video = videoRef.current
+    if (video) {
+      video.muted = !soundEnabled
+      console.log(`🔊 Audio ${soundEnabled ? 'enabled' : 'disabled'} for student ${studentId}`)
+    }
+  }, [soundEnabled, studentId])
+
   return (
-    <video
-      ref={videoRef}
-      autoPlay
-      muted
-      playsInline
-      className={className}
-      style={{ minHeight: '150px' }}
-    />
+  <video
+  ref={videoRef}
+  autoPlay
+  muted={!soundEnabled}
+  playsInline
+  className={className}
+  style={{ minHeight: '150px' }}
+  />
   )
 }

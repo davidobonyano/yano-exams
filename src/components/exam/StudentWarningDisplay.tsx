@@ -31,37 +31,41 @@ export default function StudentWarningDisplay({
   const [activeWarning, setActiveWarning] = useState<Warning | null>(null)
 
   useEffect(() => {
-    // Fetch existing warnings
-    fetchWarnings()
-
-    // Set up real-time subscription for new warnings
+    // Set up real-time broadcast subscription for warnings
     const channel = supabase
-      .channel(`student_warnings_${attemptId}`)
+      .channel(`session_${sessionId}_warnings`)
       .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'student_warnings',
-          filter: `attempt_id=eq.${attemptId}`
-        },
+        'broadcast',
+        { event: 'student_warning' },
         (payload) => {
-          const newWarning = payload.new as Warning
-          setWarnings(prev => [newWarning, ...prev])
-          setActiveWarning(newWarning)
+          const warningData = payload.payload
           
-          // Show toast notification
-          const severityColors = {
-            low: '🟡',
-            medium: '🟠', 
-            high: '🔴',
-            critical: '🚨'
+          // Only show warning if it's for this student
+          if (warningData.student_id === studentId) {
+            const newWarning: Warning = {
+              id: `${Date.now()}_${Math.random()}`, // Generate temp ID since no DB storage
+              message: warningData.message,
+              severity: warningData.severity,
+              sent_at: warningData.sent_at,
+              acknowledged: false
+            }
+            
+            setWarnings(prev => [newWarning, ...prev])
+            setActiveWarning(newWarning)
+            
+            // Show toast notification
+            const severityColors = {
+              low: '🟡',
+              medium: '🟠', 
+              high: '🔴',
+              critical: '🚨'
+            }
+            
+            toast.error(`${severityColors[newWarning.severity]} Warning from teacher: ${newWarning.message}`, {
+              duration: 8000,
+              position: 'top-center',
+            })
           }
-          
-          toast.error(`${severityColors[newWarning.severity]} Warning from teacher: ${newWarning.message}`, {
-            duration: 8000,
-            position: 'top-center',
-          })
         }
       )
       .subscribe()
@@ -69,45 +73,14 @@ export default function StudentWarningDisplay({
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [attemptId])
+  }, [sessionId, studentId, attemptId])
 
-  const fetchWarnings = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('student_warnings')
-        .select('*')
-        .eq('attempt_id', attemptId)
-        .order('sent_at', { ascending: false })
-
-      if (error) throw error
-      setWarnings(data || [])
-      
-      // Show the most recent unacknowledged warning
-      const unacknowledged = data?.find(w => !w.acknowledged)
-      if (unacknowledged) {
-        setActiveWarning(unacknowledged)
-      }
-    } catch (error) {
-      console.error('Error fetching warnings:', error)
-    }
-  }
-
-  const acknowledgeWarning = async (warningId: string) => {
-    try {
-      const { error } = await supabase
-        .from('student_warnings')
-        .update({ acknowledged: true })
-        .eq('id', warningId)
-
-      if (error) throw error
-
-      setWarnings(prev => prev.map(w => 
-        w.id === warningId ? { ...w, acknowledged: true } : w
-      ))
-      setActiveWarning(null)
-    } catch (error) {
-      console.error('Error acknowledging warning:', error)
-    }
+  const acknowledgeWarning = (warningId: string) => {
+    // Simply acknowledge locally (no DB needed for broadcast)
+    setWarnings(prev => prev.map(w => 
+      w.id === warningId ? { ...w, acknowledged: true } : w
+    ))
+    setActiveWarning(null)
   }
 
   const getSeverityConfig = (severity: string) => {

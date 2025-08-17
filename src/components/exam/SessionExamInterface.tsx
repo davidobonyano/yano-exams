@@ -24,8 +24,9 @@ import DemoExam from './DemoExam'
 import CameraPreview from './CameraPreview'
 import SubmitConfirmationModal from './SubmitConfirmationModal'
 import StudentWarningDisplay from './StudentWarningDisplay'
-import { StudentWebRTC } from '@/lib/webrtc'
+import { StudentWebRTC as OldStudentWebRTC } from '@/lib/webrtc'
 import { CameraFrameStreaming } from '@/lib/camera-streaming'
+import StudentWebRTC from './StudentWebRTC'
 import toast from 'react-hot-toast'
 
 interface SessionExamInterfaceProps {
@@ -56,8 +57,10 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
   const [examStarted, setExamStarted] = useState(false)
   const [cameraAccessRequired, setCameraAccessRequired] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
+  const [webrtcInitialized, setWebrtcInitialized] = useState(false)
 
-  const [webrtcConnection, setWebrtcConnection] = useState<StudentWebRTC | null>(null)
+  const [webrtcConnection, setWebrtcConnection] = useState<OldStudentWebRTC | null>(null)
+
   const [frameStreaming, setFrameStreaming] = useState<CameraFrameStreaming | null>(null)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
   const [examCompleted, setExamCompleted] = useState(false)
@@ -71,7 +74,8 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
   
   // Store refs for cleanup to avoid dependency issues
   const cameraStreamRef = useRef<MediaStream | null>(null)
-  const webrtcConnectionRef = useRef<StudentWebRTC | null>(null)
+  const webrtcConnectionRef = useRef<OldStudentWebRTC | null>(null)
+  const webrtcCleanupRef = useRef<(() => void) | null>(null)
   const frameStreamingRef = useRef<CameraFrameStreaming | null>(null)
   
   // Enhanced cheating detection
@@ -133,50 +137,33 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
           console.log('Current attempt:', attempt)
         }
 
-        // Camera monitoring enabled - start frame streaming
-        if (session.session.camera_monitoring_enabled) {
-          console.log('📹 Camera monitoring enabled - starting frame streaming')
-          
-          // Create a video element directly from the stream instead of waiting for DOM
-          const videoElement = document.createElement('video')
-          videoElement.srcObject = stream
-          videoElement.autoplay = true
-          videoElement.muted = true
-          videoElement.playsInline = true
-          
-          videoElement.onloadedmetadata = async () => {
-            try {
-              console.log('🎬 Video metadata loaded, starting frame streaming')
-              console.log('Video dimensions:', videoElement.videoWidth, 'x', videoElement.videoHeight)
-              console.log('Video ready state:', videoElement.readyState)
+        // Set up periodic camera status updates to keep database in sync
+        const statusUpdateInterval = setInterval(async () => {
+          if (attempt?.id && stream && stream.active) {
+            const videoTracks = stream.getVideoTracks()
+            const isReallyOn = videoTracks.length > 0 && videoTracks[0].enabled && videoTracks[0].readyState === 'live'
+            
+            console.log('📹 Periodic camera status check:', { isReallyOn, tracks: videoTracks.length })
+            
+            const { error } = await supabase
+              .from('student_exam_attempts')
+              .update({ 
+                camera_enabled: isReallyOn,
+                last_activity_at: new Date().toISOString()
+              })
+              .eq('id', attempt.id)
               
-              const frameStream = new CameraFrameStreaming(
-                session.session.id,
-                session.student.id,
-                videoElement
-              )
-              
-              await frameStream.startStreaming()
-              setFrameStreaming(frameStream)
-              
-              console.log('✅ Frame streaming started successfully')
-              toast.success('Camera monitoring with live frames active')
-            } catch (error) {
-              console.error('❌ Error starting frame streaming:', error)
-              toast.error('Frame streaming failed to start')
+            if (error) {
+              console.error('Failed to update camera status:', error)
             }
           }
-          
-          videoElement.onerror = (error) => {
-            console.error('❌ Video element error:', error)
-            toast.error('Video setup failed')
-          }
-          
-          // Start playing the video
-          videoElement.play().catch((error) => {
-            console.error('❌ Error playing video:', error)
-          })
-        }
+        }, 3000) // Update every 3 seconds
+
+        // Store interval ref for cleanup
+        return () => clearInterval(statusUpdateInterval)
+
+        // WebRTC will be handled by the StudentWebRTC component below
+        console.log('📹 Camera enabled - WebRTC component will handle streaming')
       } catch (error) {
         console.error('Error updating camera status:', error)
         toast.error('Camera enabled, but status update failed')
@@ -335,11 +322,13 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         }
       }
       
-      // Cleanup frame streaming
-      if (frameStreamingRef.current) {
-        console.log('Unmount: Stopping frame streaming')
-        frameStreamingRef.current.stopStreaming()
-      }
+      // WebRTC cleanup handled by StudentWebRTC component
+      
+      // Cleanup frame streaming - DISABLED for WebRTC
+      // if (frameStreamingRef.current) {
+      //   console.log('Unmount: Stopping frame streaming')
+      //   frameStreamingRef.current.stopStreaming()
+      // }
     }
   }, []) // No dependencies - only run on mount/unmount
 
@@ -591,14 +580,50 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     try {
       console.log('Exam submission started - cleaning up camera...')
       
-      // Stop camera stream and cleanup WebRTC connection
+      // NUCLEAR OPTION: Stop ALL camera/audio immediately
+      console.log('🚫 SUBMIT: NUCLEAR CAMERA/AUDIO SHUTDOWN')
+      
+      // 1. Stop WebRTC component first
+      if (webrtcCleanupRef.current) {
+        console.log('🔴 SUBMIT: WebRTC cleanup')
+        webrtcCleanupRef.current()
+        webrtcCleanupRef.current = null
+        setWebrtcInitialized(false)
+      }
+      
+      // 2. Force stop camera stream state
       if (cameraStream) {
-        console.log('Stopping camera stream tracks')
+        console.log('🔴 SUBMIT: Force stopping camera state')
         cameraStream.getTracks().forEach(track => {
           track.stop()
-          console.log('Stopped track:', track.kind)
+          console.log('🛑 SUBMIT: Stopped track:', track.kind)
         })
         setCameraStream(null)
+      }
+      
+      // 3. SUPER NUCLEAR: Force stop ALL video elements and kill streams
+      try {
+        console.log('💥 SUPER NUCLEAR: Killing all video elements')
+        
+        // Find and kill ALL video elements on the page
+        const videos = document.querySelectorAll('video')
+        videos.forEach((video, index) => {
+          console.log(`🔴 Found video element ${index}:`, video.src || 'stream')
+          if (video.srcObject) {
+            const stream = video.srcObject as MediaStream
+            stream.getTracks().forEach(track => {
+              track.stop()
+              console.log('💥 KILLED video element track:', track.kind)
+            })
+            video.srcObject = null
+          }
+          video.src = ''
+          video.load()
+        })
+        
+        console.log('💥 SUPER NUCLEAR: All video elements destroyed')
+      } catch (error) {
+        console.log('💥 SUPER NUCLEAR: Error during video destruction:', error)
       }
       
       // Cleanup WebRTC connection
@@ -613,11 +638,12 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       }
       
       // Cleanup frame streaming
-      if (frameStreaming) {
-        console.log('Stopping frame streaming')
-        frameStreaming.stopStreaming()
-        setFrameStreaming(null)
-      }
+      // OLD: Frame streaming cleanup - DISABLED for WebRTC
+      // if (frameStreaming) {
+      //   console.log('Stopping frame streaming')
+      //   frameStreaming.stopStreaming()
+      //   setFrameStreaming(null)
+      // }
       
       // Update camera status in database
       if (attempt?.id) {
@@ -736,6 +762,29 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       }
     }
   }, [webrtcConnection])
+
+  // Force cleanup when exam completes (backup safety net)
+  useEffect(() => {
+    if (examCompleted) {
+      console.log('🚫 Exam completed - forcing camera/audio cleanup')
+      
+      // Force WebRTC cleanup
+      if (webrtcCleanupRef.current) {
+        webrtcCleanupRef.current()
+        webrtcCleanupRef.current = null
+        setWebrtcInitialized(false)
+      }
+      
+      // Force camera stream cleanup
+      if (cameraStream) {
+        cameraStream.getTracks().forEach(track => {
+          track.stop()
+          console.log('🛑 Force stopped track on exam completion:', track.kind)
+        })
+        setCameraStream(null)
+      }
+    }
+  }, [examCompleted])
 
   // Show exam completion success state
   if (examCompleted) {
@@ -1067,7 +1116,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
             {/* Timer and Camera Status */}
             <div className="flex items-center space-x-4">
-              {/* Camera & Audio Indicator */}
+              {/* Camera & Audio Indicator + WebRTC */}
               {cameraStream && (
                 <div className="text-center p-4 border rounded-lg bg-green-50">
                   <div className="flex items-center justify-center space-x-2 mb-1">
@@ -1077,6 +1126,35 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                   <div className="flex items-center justify-center space-x-1">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                     <span className="text-xs font-medium text-green-700">Camera & Audio On</span>
+                  </div>
+                </div>
+              )}
+              
+              {/* WebRTC Component for live streaming */}
+              {session?.session?.camera_monitoring_enabled && examStarted && session.student?.id && !webrtcInitialized && (
+                <div className="text-center p-4 border rounded-lg bg-blue-50">
+                  <StudentWebRTC 
+                    studentId={session.student.id} 
+                    onStreamReady={(stream) => {
+                      setCameraStream(stream)
+                      setWebrtcInitialized(true)
+                      console.log('📹 WebRTC stream ready - updating camera indicator')
+                    }}
+                    onCleanupRef={(cleanupFn) => {
+                      webrtcCleanupRef.current = cleanupFn
+                    }}
+                    onStreamStopped={() => {
+                      setCameraStream(null)
+                      console.log('📹 Camera stream stopped - clearing indicator')
+                    }}
+                  />
+                </div>
+              )}
+              
+              {webrtcInitialized && (
+                <div className="text-center p-4 border rounded-lg bg-green-50">
+                  <div className="text-sm text-green-600">
+                    WebRTC streaming active ✅
                   </div>
                 </div>
               )}

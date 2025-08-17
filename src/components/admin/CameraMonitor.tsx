@@ -5,12 +5,15 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { ExamSession } from '@/types/database-v2'
 import { TeacherWebRTC } from '@/lib/webrtc'
+import { TeacherWebRTCNew } from '@/lib/webrtc-streaming'
 import { CameraFrameReceiver } from '@/lib/camera-streaming'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MagneticButton } from '@/components/ui/magnetic-button'
 import { VideoStream } from '@/components/ui/video-stream'
 import TeacherVideoDisplay from './TeacherVideoDisplay'
 import StudentFrameDisplay from './StudentFrameDisplay'
+import TeacherStudentModal from './TeacherStudentModal'
+import SendWarningModal from './SendWarningModal'
 import { 
   X, 
   Camera, 
@@ -22,7 +25,8 @@ import {
   Monitor,
   Maximize2,
   Volume2,
-  VolumeX
+  VolumeX,
+  AlertTriangle as WarningIcon
 } from 'lucide-react'
 
 interface CameraMonitorProps {
@@ -46,14 +50,55 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
   const [loading, setLoading] = useState(true)
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null)
   const [soundEnabled, setSoundEnabled] = useState(false)
+  const [warningStudent, setWarningStudent] = useState<string | null>(null)
   const webrtcRef = useRef<TeacherWebRTC | null>(null)
+  const webrtcStreamingRef = useRef<TeacherWebRTCNew | null>(null)
   const frameReceiverRef = useRef<CameraFrameReceiver | null>(null)
   const [studentFrames, setStudentFrames] = useState<Map<string, string>>(new Map())
   const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map())
 
+  const setupWebRTCStreaming = async () => {
+    try {
+      console.log('🚀 Initializing new WebRTC streaming system...')
+      
+      const webrtcStreaming = new TeacherWebRTCNew(session.id, session.teacher_id)
+      
+      // Handle incoming student streams
+      webrtcStreaming.onStudentStreamReceived = (studentId: string, stream: MediaStream) => {
+        console.log('🎥 TEACHER: Received WebRTC stream from student:', studentId)
+        console.log('Stream tracks:', {
+          video: stream.getVideoTracks().length,
+          audio: stream.getAudioTracks().length
+        })
+        
+        // Update student list with the new stream
+        setStudents(prev => prev.map(student => 
+          student.student_id === studentId 
+            ? { ...student, stream }
+            : student
+        ))
+      }
+      
+      // Handle connection state changes
+      webrtcStreaming.onConnectionStateChange = (studentId: string, state: string) => {
+        console.log(`📡 Student ${studentId} WebRTC state:`, state)
+        if (state === 'connected') {
+          console.log(`✅ Live video/audio established with student ${studentId}`)
+        }
+      }
+      
+      webrtcStreamingRef.current = webrtcStreaming
+      console.log('✅ New WebRTC streaming system initialized')
+    } catch (error) {
+      console.error('❌ WebRTC streaming initialization failed:', error)
+    }
+  }
+
   useEffect(() => {
     fetchStudentFeeds()
-    initializeWebRTC()
+    // OLD WebRTC disabled - using simple per-student channels now
+    // initializeWebRTC()
+    // setupWebRTCStreaming()
     
     // Set up real-time subscription for camera status updates
     const subscription = supabase
@@ -72,23 +117,27 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
       )
       .subscribe()
 
-    // Initialize frame receiver for video streaming
-    const frameReceiver = new CameraFrameReceiver(session.id)
-    frameReceiver.startReceiving((studentId, frameData) => {
-      console.log('📸 Teacher received frame from student:', studentId)
-      console.log('📊 Current student frames map keys:', Array.from(studentFrames.keys()))
-      setStudentFrames(prev => new Map(prev.set(studentId, frameData)))
-    })
-    frameReceiverRef.current = frameReceiver
+    // OLD: Initialize frame receiver for video streaming - DISABLED for WebRTC
+    // const frameReceiver = new CameraFrameReceiver(session.id)
+    // frameReceiver.startReceiving((studentId, frameData) => {
+    //   console.log('📸 Teacher received frame from student:', studentId)
+    //   console.log('📊 Current student frames map keys:', Array.from(studentFrames.keys()))
+    //   setStudentFrames(prev => new Map(prev.set(studentId, frameData)))
+    // })
+    // frameReceiverRef.current = frameReceiver
 
     return () => {
       subscription.unsubscribe()
       if (webrtcRef.current) {
         webrtcRef.current.destroy()
       }
-      if (frameReceiverRef.current) {
-        frameReceiverRef.current.stopReceiving()
+      if (webrtcStreamingRef.current) {
+        webrtcStreamingRef.current.destroy()
       }
+      // OLD: Frame receiver cleanup - DISABLED for WebRTC
+      // if (frameReceiverRef.current) {
+      //   frameReceiverRef.current.stopReceiving()
+      // }
     }
   }, [session.id])
 
@@ -292,61 +341,7 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
               </CardHeader>
 
               <CardContent className="p-6 max-h-[80vh] overflow-y-auto">
-                {selectedStudent ? (
-                  // Full-screen view of selected student
-                  <div className="space-y-4">
-                    {(() => {
-                      const student = students.find(s => s.id === selectedStudent)
-                      if (!student) return null
-                      
-                      return (
-                        <div className="space-y-4">
-                          <div className="flex items-center justify-between">
-                            <div>
-                              <h3 className="text-xl font-semibold">{student.full_name}</h3>
-                              <p className="text-gray-500">ID: {student.student_id}</p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {student.camera_enabled ? (
-                                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
-                                  <CheckCircle className="w-4 h-4 mr-1" />
-                                  Camera On
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-red-100 text-red-800">
-                                  <CameraOff className="w-4 h-4 mr-1" />
-                                  Camera Off
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                          
-                          <StudentFrameDisplay
-                            studentId={student.student_name_id || student.student_id}
-                            studentName={student.full_name}
-                            frameData={studentFrames.get(student.student_id)}
-                            className="w-full h-full"
-                          />
-
-                          {student.violations.length > 0 && (
-                            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                              <div className="flex items-center gap-2 mb-2">
-                                <AlertTriangle className="w-5 h-5 text-red-600" />
-                                <h4 className="font-medium text-red-900">Security Violations</h4>
-                              </div>
-                              <ul className="text-sm text-red-700 space-y-1">
-                                {student.violations.map((violation, index) => (
-                                  <li key={index}>• {violation}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })()}
-                  </div>
-                ) : (
-                  // Grid view of all students
+                {/* Grid view of all students */}
                   <div className="space-y-6">
                     {/* Statistics */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -389,7 +384,7 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 max-h-[60vh] overflow-y-auto">
                       {students.map((student, index) => (
                         <motion.div
-                          key={student.id}
+                          key={student.student_id || `student-${index}`}
                           initial={{ opacity: 0, y: 20 }}
                           animate={{ opacity: 1, y: 0 }}
                           transition={{ delay: index * 0.1 }}
@@ -397,11 +392,24 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                           onClick={() => toggleFullscreen(student.id)}
                         >
                         <div className="relative">
-                        <StudentFrameDisplay
-                          studentId={student.student_name_id || student.student_id}
-                          studentName={student.full_name}
-                            frameData={studentFrames.get(student.student_id)}
-                         />
+                          <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center">
+                            <div className="text-center">
+                              <Camera className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+                              <p className="text-xs text-gray-500">Click to view live stream</p>
+                            </div>
+                          </div>
+                          
+                          {/* Warning Button */}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setWarningStudent(student.id)
+                            }}
+                            className="absolute top-2 right-2 p-2 bg-orange-500 hover:bg-orange-600 text-white rounded-full shadow-lg transition-colors"
+                            title="Send Warning"
+                          >
+                            <WarningIcon className="w-4 h-4" />
+                          </button>
                           
                         {student.violations.length > 0 && (
                         <div className="absolute top-2 left-2">
@@ -417,11 +425,11 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                             <p className="text-xs text-gray-500">ID: {student.student_id}</p>
                             <div className="flex items-center justify-between mt-2">
                               <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                                student.camera_enabled 
-                                  ? 'bg-green-100 text-green-800' 
-                                  : 'bg-gray-100 text-gray-800'
+                              student.camera_enabled || student.stream
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-gray-100 text-gray-800'
                               }`}>
-                                {student.camera_enabled ? 'Online' : 'Offline'}
+                              {student.camera_enabled || student.stream ? 'Camera On' : 'Camera Off'}
                               </span>
                               <Eye className="w-4 h-4 text-gray-400" />
                             </div>
@@ -477,13 +485,49 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                         </div>
                       </div>
                     )}
-                  </div>
-                )}
+                    </div>
               </CardContent>
             </Card>
           </motion.div>
         </div>
       </motion.div>
+      
+      {/* Simple WebRTC Student Modal */}
+      {selectedStudent && (() => {
+        const student = students.find(s => s.id === selectedStudent)
+        return student ? (
+          <TeacherStudentModal
+            studentId={student.student_id}
+            studentName={student.full_name}
+            open={true}
+            onClose={() => setSelectedStudent(null)}
+          />
+        ) : null
+      })()}
+      
+      {/* Warning Modal */}
+      {warningStudent && (() => {
+        const student = students.find(s => s.id === warningStudent)
+        return student ? (
+          <SendWarningModal
+            attempt={{
+              id: student.id,
+              student_id: student.student_id,
+              students: {
+                id: student.student_id,
+                student_id: student.student_name_id || student.student_id,
+                full_name: student.full_name,
+                class_level: 'Unknown'
+              }
+            }}
+            sessionId={session.id}
+            teacherId={session.teacher_id}
+            isOpen={true}
+            onClose={() => setWarningStudent(null)}
+            onSent={() => setWarningStudent(null)}
+          />
+        ) : null
+      })()}
     </AnimatePresence>
   )
 }

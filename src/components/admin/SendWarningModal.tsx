@@ -115,35 +115,22 @@ export default function SendWarningModal({
         student_id: attempt.students.id,
         teacher_id: teacherId,
         message: warningMessage,
-        severity: warningSeverity
+        severity: warningSeverity,
+        sent_at: new Date().toISOString()
       }
 
-      console.log('Sending warning using production function:', warningData)
+      console.log('Sending warning via broadcast:', warningData)
 
-      // Use production-ready PostgreSQL function for atomic warning creation
-      const { data: result, error: functionError } = await supabase.rpc('send_student_warning', {
-        p_attempt_id: warningData.attempt_id,
-        p_session_id: warningData.session_id,
-        p_student_id: warningData.student_id,
-        p_teacher_id: warningData.teacher_id,
-        p_message: warningData.message,
-        p_severity: warningData.severity
+      // Send warning via Supabase Broadcast (real-time, no DB storage)
+      const channel = supabase.channel(`session_${sessionId}_warnings`)
+      
+      await channel.send({
+        type: 'broadcast',
+        event: 'student_warning',
+        payload: warningData
       })
 
-      console.log('Warning function result:', result)
-      
-      if (functionError) {
-        console.error('Warning function error:', functionError)
-        throw functionError
-      }
-
-      // Check if the function returned an error
-      if (result && !result.success) {
-        console.error('Warning function returned error:', result.error)
-        throw new Error(result.error)
-      }
-
-      console.log(`Warning sent successfully! New warning count: ${result?.new_warning_count || 'unknown'}`)
+      console.log('Warning broadcast sent successfully!')
 
       toast.success(`Warning sent to ${attempt.students.full_name}`)
       onSent()

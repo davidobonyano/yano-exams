@@ -60,8 +60,8 @@ export class StudentWebRTC {
 
     // Create offer
     const offer = await this.peerConnection.createOffer({
-      offerToReceiveVideo: false,
-      offerToReceiveAudio: false
+      offerToReceiveVideo: true,
+      offerToReceiveAudio: true
     })
     
     await this.peerConnection.setLocalDescription(offer)
