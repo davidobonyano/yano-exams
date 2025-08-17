@@ -21,7 +21,7 @@ import SessionQuestionDisplay from './SessionQuestionDisplay'
 import ExamInstructions from './ExamInstructions'
 import DemoExam from './DemoExam'
 
-import CameraPreview from './CameraPreview'
+
 import SubmitConfirmationModal from './SubmitConfirmationModal'
 import StudentWarningDisplay from './StudentWarningDisplay'
 import { StudentWebRTC as OldStudentWebRTC } from '@/lib/webrtc'
@@ -1451,32 +1451,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                 </div>
               </Card>
 
-              {/* Camera Preview Card */}
-              {cameraStream && (
-                <Card className="bg-white/80 backdrop-blur">
-                  <div className="p-6">
-                    <h3 className="font-bold mb-4 flex items-center space-x-2">
-                      <Camera className="w-5 h-5 text-green-500" />
-                      <span>Camera Preview</span>
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    </h3>
-                    
-                    <div className="relative">
-                      <CameraPreview stream={cameraStream} />
-                      <div className="absolute top-2 right-2">
-                        <div className="flex items-center space-x-1 bg-green-500 text-white px-2 py-1 rounded-full text-xs">
-                          <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
-                          <span>Live</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <p className="text-xs text-gray-500 mt-2 text-center">
-                      Your video is being monitored for exam integrity
-                    </p>
-                  </div>
-                </Card>
-              )}
+
             </motion.div>
           </div>
         </div>
