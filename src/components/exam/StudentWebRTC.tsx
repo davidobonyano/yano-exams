@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { signalingChannelFor } from "@/utils/signaling";
+import { supabase } from "@/lib/supabase";
 
 // Optional: add your own TURN if you have one
 const rtcConfig: RTCConfiguration = {
@@ -24,6 +25,7 @@ export default function StudentWebRTC({ studentId, onStreamReady, onCleanupRef, 
   const [error, setError] = useState<string | null>(null);
   const setupRef = useRef(false);
   const offerSentRef = useRef(false);
+  const nuclearChannelRef = useRef<any>(null);
 
   useEffect(() => {
     if (!studentId) return;
@@ -54,12 +56,37 @@ export default function StudentWebRTC({ studentId, onStreamReady, onCleanupRef, 
         // 2) Set up peer connection
         const pc = new RTCPeerConnection(rtcConfig);
         pcRef.current = pc;
+        
+        // Monitor connection state changes
+        pc.onconnectionstatechange = () => {
+          console.log('🔗 Student connection state:', pc.connectionState);
+          if (pc.connectionState === 'connected') {
+            console.log('✅ WebRTC connection established with teacher');
+          } else if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed') {
+            console.log('⚠️ WebRTC connection lost, resetting offer flag');
+            offerSentRef.current = false; // Allow new offers when connection is lost
+          }
+        };
 
         // Send tracks to teacher
         stream.getTracks().forEach((t) => pc.addTrack(t, stream));
 
         // 3) ICE Candidates from student → teacher
         const chan = signalingChannelFor(studentId);
+        
+        // Listen for nuclear camera shutdown notifications
+        nuclearChannelRef.current = supabase
+          .channel('camera-nuclear-shutdown')
+          .on('broadcast', { event: 'camera_nuclear_shutdown' }, (payload) => {
+            console.log('💥 NUCLEAR CAMERA SHUTDOWN RECEIVED:', payload);
+            if (payload.payload.student_id === studentId) {
+              console.log('💥 NUCLEAR SHUTDOWN - Force cleaning up camera immediately');
+              cleanup();
+              onStreamStopped?.();
+            }
+          })
+          .subscribe();
+          
         pc.onicecandidate = (e) => {
           if (e.candidate) {
             chan.send({
@@ -74,19 +101,19 @@ export default function StudentWebRTC({ studentId, onStreamReady, onCleanupRef, 
         chan
           .on("broadcast", { event: "call-start" }, async () => {
             try {
-              // Prevent multiple offers
-              if (offerSentRef.current) {
-                console.log('⚠️ Offer already sent, ignoring duplicate call-start');
-                return;
-              }
-              
               // Only create offer if we're in stable state
               if (pc.signalingState !== 'stable') {
                 console.log('⚠️ Ignoring call-start - connection not ready:', pc.signalingState);
                 return;
               }
               
-              const offer = await pc.createOffer({ offerToReceiveAudio: false, offerToReceiveVideo: false });
+              // Reset flag for new offer attempt
+              offerSentRef.current = false;
+              
+              const offer = await pc.createOffer({ 
+                offerToReceiveAudio: false, 
+                offerToReceiveVideo: false 
+              });
               await pc.setLocalDescription(offer);
               
               offerSentRef.current = true;
@@ -156,8 +183,12 @@ export default function StudentWebRTC({ studentId, onStreamReady, onCleanupRef, 
             pcRef.current = null;
           }
           
-          // Unsubscribe from channel
+          // Unsubscribe from channels
           chan.unsubscribe();
+          if (nuclearChannelRef.current) {
+            nuclearChannelRef.current.unsubscribe();
+            nuclearChannelRef.current = null;
+          }
           
           // Reset all flags
           setupRef.current = false;

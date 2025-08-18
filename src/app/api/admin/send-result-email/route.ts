@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
 import { generateResultsPDF } from '@/lib/pdf-generator'
 import { getDetailedStudentResults } from '@/lib/auto-scoring'
@@ -16,6 +16,12 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
+
+    // Create service role client to bypass RLS
+    const supabase = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    )
 
     // Check environment variables
     console.log('Email env vars:', {
@@ -90,9 +96,15 @@ export async function POST(req: NextRequest) {
     // Generate PDF attachment
     console.log('Generating PDF attachment...')
     const attemptId = resultData.student_exam_attempts?.id || resultData.attempt_id
+    console.log('Attempt ID for PDF:', attemptId)
     
     // Get detailed results for PDF
     const detailedResults = await getDetailedStudentResults(attemptId)
+    console.log('Detailed results for PDF:', { 
+      success: detailedResults?.success, 
+      hasAttemptInfo: !!detailedResults?.attempt_info,
+      error: detailedResults?.error 
+    })
     
     let pdfBuffer = null
     let filename = `exam_results_${studentName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`
@@ -142,6 +154,12 @@ export async function POST(req: NextRequest) {
       }
 
       try {
+        console.log('Starting PDF generation with data:', {
+          examTitle: exam.title,
+          studentName: attemptInfo.student_name,
+          sessionCode: attemptInfo.session_code || resultData.exam_sessions.session_code
+        })
+        
         const pdf = await generateResultsPDF({
           exam: exam as any,
           attempt: attempt as any,
@@ -152,11 +170,17 @@ export async function POST(req: NextRequest) {
 
         pdfBuffer = Buffer.from(pdf.output('arraybuffer'))
         filename = `${exam.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_detailed_results_${studentName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`
-        console.log('PDF generated successfully for attachment')
+        console.log('PDF generated successfully for attachment, buffer size:', pdfBuffer.length)
       } catch (pdfError) {
         console.error('Error generating PDF:', pdfError)
+        console.error('PDF Error stack:', pdfError instanceof Error ? pdfError.stack : 'No stack')
         // Continue without PDF attachment
       }
+    } else {
+      console.log('⚠️ Detailed results failed, skipping PDF generation:', {
+        success: detailedResults?.success,
+        error: detailedResults?.error
+      })
     }
 
     // Create email content
@@ -247,7 +271,9 @@ export async function POST(req: NextRequest) {
         content: pdfBuffer,
         contentType: 'application/pdf'
       }]
-      console.log('PDF attachment added to email')
+      console.log('✅ PDF attachment added to email:', filename, 'Size:', pdfBuffer.length)
+    } else {
+      console.log('❌ No PDF buffer available - email will be sent without PDF attachment')
     }
 
     // Send the email

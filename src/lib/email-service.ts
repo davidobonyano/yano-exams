@@ -1,6 +1,12 @@
 // Email service for automated result delivery
 import nodemailer from 'nodemailer';
-import { supabase } from './supabase';
+import { createClient } from '@supabase/supabase-js';
+
+// Create service role client to bypass RLS
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
 // Initialize nodemailer transporter
 const transporter = nodemailer.createTransport({

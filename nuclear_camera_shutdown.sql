@@ -5,8 +5,8 @@
 CREATE OR REPLACE FUNCTION nuclear_camera_shutdown()
 RETURNS TRIGGER AS $$
 BEGIN
-  -- If exam status changes to 'completed', immediately disable camera
-  IF NEW.status = 'completed' AND OLD.status != 'completed' THEN
+  -- If exam status changes to 'completed' OR 'submitted', immediately disable camera
+  IF (NEW.status IN ('completed', 'submitted')) AND (OLD.status NOT IN ('completed', 'submitted')) THEN
     NEW.camera_enabled = false;
     
     -- Log the nuclear shutdown

@@ -20,7 +20,9 @@ import {
   Upload,
   FileText,
   Shuffle,
-  Eye
+  Eye,
+  Image,
+  Trash
 } from 'lucide-react'
 import toast from 'react-hot-toast'
 
@@ -32,6 +34,7 @@ interface Question {
   correct_answer: string
   points: number
   explanation?: string
+  image_data?: string
 }
 
 interface QuestionManagerProps {
@@ -57,6 +60,9 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
   const [points, setPoints] = useState(1)
   const [explanation, setExplanation] = useState('')
   const [bulkText, setBulkText] = useState('')
+  const [imageFile, setImageFile] = useState<File | null>(null)
+  const [imagePreview, setImagePreview] = useState('')
+  const [processingImage, setProcessingImage] = useState(false)
 
   useEffect(() => {
     fetchQuestions()
@@ -87,7 +93,56 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
     setCorrectAnswer('')
     setPoints(1)
     setExplanation('')
+    setImageFile(null)
+    setImagePreview('')
     setEditingQuestion(null)
+  }
+
+  const processImageToBase64 = async (file: File): Promise<string | null> => {
+    try {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader()
+        reader.onload = () => {
+          const result = reader.result as string
+          resolve(result)
+        }
+        reader.onerror = () => reject(new Error('Failed to read file'))
+        reader.readAsDataURL(file)
+      })
+    } catch (error) {
+      console.error('Error processing image:', error)
+      toast.error('Failed to process image')
+      return null
+    }
+  }
+
+  const handleImageSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit
+        toast.error('Image size must be less than 5MB')
+        return
+      }
+      
+      if (!file.type.startsWith('image/')) {
+        toast.error('Please select a valid image file')
+        return
+      }
+      
+      setImageFile(file)
+      
+      // Create preview
+      const reader = new FileReader()
+      reader.onload = (e) => {
+        setImagePreview(e.target?.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const removeImage = () => {
+    setImageFile(null)
+    setImagePreview('')
   }
 
   const handleAddQuestion = async () => {
@@ -97,6 +152,14 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
     }
 
     try {
+      setProcessingImage(true)
+      
+      let imageData = null
+      if (imageFile) {
+        imageData = await processImageToBase64(imageFile)
+        if (!imageData) return // Processing failed
+      }
+
       const questionData = {
         exam_id: examId,
         question_text: questionText.trim(),
@@ -104,7 +167,8 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
         options: questionType === 'multiple_choice' ? options : null,
         correct_answer: correctAnswer.trim(),
         points,
-        explanation: explanation.trim() || null
+        explanation: explanation.trim() || null,
+        image_data: imageData
       }
 
       const { error } = await supabase
@@ -120,6 +184,8 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
     } catch (error) {
       console.error('Error adding question:', error)
       toast.error('Failed to add question')
+    } finally {
+      setProcessingImage(false)
     }
   }
 
@@ -130,6 +196,14 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
     }
 
     try {
+      setProcessingImage(true)
+      
+      let imageData: string | undefined = editingQuestion.image_data || undefined
+      if (imageFile) {
+        imageData = await processImageToBase64(imageFile) || undefined
+        if (!imageData) return // Processing failed
+      }
+
       const { error } = await supabase
         .from('questions')
         .update({
@@ -138,7 +212,8 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
           options: questionType === 'multiple_choice' ? options : null,
           correct_answer: correctAnswer.trim(),
           points,
-          explanation: explanation.trim() || null
+          explanation: explanation.trim() || null,
+          image_data: imageData
         })
         .eq('id', editingQuestion.id)
 
@@ -150,6 +225,8 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
     } catch (error) {
       console.error('Error updating question:', error)
       toast.error('Failed to update question')
+    } finally {
+      setProcessingImage(false)
     }
   }
 
@@ -327,6 +404,8 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
     setCorrectAnswer(question.correct_answer)
     setPoints(question.points)
     setExplanation(question.explanation || '')
+    setImagePreview(question.image_data || '')
+    setImageFile(null) // Clear any new file selection
     setShowAddForm(true)
   }
 
@@ -411,7 +490,19 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                               {question.question_type.replace('_', ' ')} • {question.points} pts
                             </span>
                           </div>
-                          <p className="font-medium mb-2">{question.question_text}</p>
+                          <div className="mb-2">
+                            <p className="font-medium">{question.question_text}</p>
+                            {question.image_data && (
+                              <div className="mt-2 p-2 bg-blue-50 rounded border">
+                                <img
+                                  src={question.image_data}
+                                  alt="Question diagram"
+                                  className="max-w-full max-h-24 rounded object-contain mx-auto"
+                                />
+                                <p className="text-xs text-blue-600 mt-1 text-center">📊 Includes visual element</p>
+                              </div>
+                            )}
+                          </div>
                           
                           {question.options && (
                             <div className="grid grid-cols-2 gap-2 text-sm text-gray-600 mb-2">
@@ -580,6 +671,58 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                       />
                     )}
 
+                    {/* Image Upload Section */}
+                    <div className="space-y-4">
+                      <h4 className="font-medium text-gray-700 flex items-center">
+                        <Image className="w-4 h-4 mr-2" />
+                        Add Image/Diagram (Optional)
+                      </h4>
+                      <p className="text-sm text-gray-500">
+                        Upload graphs, tables, diagrams, or other visual elements to enhance your question.
+                      </p>
+                      
+                      {imagePreview ? (
+                        <div className="relative p-4 border border-gray-200 rounded-lg bg-gray-50">
+                          <div className="text-sm text-green-600 mb-2 flex items-center">
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            Image ready - will be integrated into question display
+                          </div>
+                          <img
+                            src={imagePreview}
+                            alt="Question image preview"
+                            className="max-w-full max-h-32 rounded border object-contain mx-auto"
+                          />
+                          <button
+                            onClick={removeImage}
+                            className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full hover:bg-red-600 transition-colors"
+                            title="Remove image"
+                          >
+                            <Trash className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            onChange={handleImageSelect}
+                            className="hidden"
+                            id="image-upload"
+                          />
+                          <label htmlFor="image-upload" className="cursor-pointer">
+                            <Upload className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+                            <p className="text-sm text-gray-500 mb-1">
+                              Click to upload an image
+                            </p>
+                            <p className="text-xs text-gray-400">
+                              Supports JPG, PNG, GIF up to 5MB<br/>
+                              Perfect for math diagrams, charts, graphs, etc.
+                            </p>
+                          </label>
+                        </div>
+                      )}
+                    </div>
+
                     <FloatingInput
                       label="Explanation (Optional)"
                       value={explanation}
@@ -590,9 +733,17 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                     <div className="flex gap-4 pt-4">
                       <MagneticButton
                         onClick={editingQuestion ? handleEditQuestion : handleAddQuestion}
-                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl"
+                        disabled={processingImage}
+                        className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        {editingQuestion ? 'Update Question' : 'Add Question'}
+                        {processingImage ? (
+                          <div className="flex items-center justify-center">
+                            <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                            {imageFile ? 'Processing image...' : 'Saving...'}
+                          </div>
+                        ) : (
+                          editingQuestion ? 'Update Question' : 'Add Question'
+                        )}
                       </MagneticButton>
                       <MagneticButton
                         onClick={() => {

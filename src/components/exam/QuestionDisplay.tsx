@@ -1,6 +1,6 @@
 'use client'
 
-import { Question } from '@/types/database'
+import { Question } from '@/types/database-v2'
 
 interface QuestionDisplayProps {
   question: Question
@@ -105,6 +105,17 @@ export default function QuestionDisplay({ question, answer, onAnswerChange }: Qu
             </span>
           </div>
         </div>
+        
+        {/* Integrated Visual Content */}
+        {question.image_data && (
+          <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
+            <img
+              src={question.image_data}
+              alt="Question visual content"
+              className="max-w-full max-h-80 rounded object-contain mx-auto"
+            />
+          </div>
+        )}
       </div>
 
       {/* Answer Section */}

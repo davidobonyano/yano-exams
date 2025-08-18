@@ -491,7 +491,6 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
           </motion.div>
         </div>
       </motion.div>
-      
       {/* Simple WebRTC Student Modal */}
       {selectedStudent && (() => {
         const student = students.find(s => s.id === selectedStudent)

@@ -14,6 +14,7 @@ import CreateExamModal from './CreateExamModal'
 import CreateSessionModal from './CreateSessionModal'
 import EndSessionModal from './EndSessionModal'
 import DeleteSessionModal from './DeleteSessionModal'
+import DeleteExamModal from './DeleteExamModal'
 import QuestionManager from './QuestionManager'
 import StudentManagement from './StudentManagement'
 import ExamTracker from './ExamTracker'
@@ -48,6 +49,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
   const [copiedSessions, setCopiedSessions] = useState<Set<string>>(new Set())
   const [endSessionModal, setEndSessionModal] = useState<{isOpen: boolean, sessionId: string, sessionName: string}>({isOpen: false, sessionId: '', sessionName: ''})
   const [deleteSessionModal, setDeleteSessionModal] = useState<{isOpen: boolean, sessionId: string, sessionName: string}>({isOpen: false, sessionId: '', sessionName: ''})
+  const [deleteExamModal, setDeleteExamModal] = useState<{isOpen: boolean, examId: string, examTitle: string}>({isOpen: false, examId: '', examTitle: ''})
   const [modalLoading, setModalLoading] = useState(false)
 
   useEffect(() => {
@@ -208,12 +210,18 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
     setShowCameraMonitor(true)
   }
 
-  const handleDeleteExam = async (examId: string) => {
-    if (!confirm('Are you sure you want to delete this exam? This action cannot be undone.')) return
+  const handleDeleteExam = (exam: Exam) => {
+    setDeleteExamModal({
+      isOpen: true,
+      examId: exam.id,
+      examTitle: exam.title
+    })
+  }
 
+  const confirmDeleteExam = async () => {
     try {
       const { data, error } = await supabase.rpc('delete_ended_exam', {
-        p_exam_id: examId,
+        p_exam_id: deleteExamModal.examId,
         p_teacher_id: user.id
       })
 
@@ -647,7 +655,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
                         Create Session
                       </button>
                       <button
-                        onClick={() => handleDeleteExam(exam.id)}
+                        onClick={() => handleDeleteExam(exam)}
                         className="w-full inline-flex justify-center items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
                       >
                         <svg className="-ml-1 mr-2 h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1041,6 +1049,13 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
         onConfirm={confirmDeleteSession}
         onCancel={() => setDeleteSessionModal({isOpen: false, sessionId: '', sessionName: ''})}
         loading={modalLoading}
+      />
+
+      <DeleteExamModal
+        isOpen={deleteExamModal.isOpen}
+        examTitle={deleteExamModal.examTitle}
+        onConfirm={confirmDeleteExam}
+        onClose={() => setDeleteExamModal({isOpen: false, examId: '', examTitle: ''})}
       />
     </div>
   )

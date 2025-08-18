@@ -364,7 +364,7 @@ export default function ExamTracker({ session, onClose }: ExamTrackerProps) {
           </div>
 
           {/* Main Content */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto max-h-[calc(100vh-250px)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 p-6">
               {/* Student List */}
               <div className="lg:col-span-2">
@@ -376,7 +376,7 @@ export default function ExamTracker({ session, onClose }: ExamTrackerProps) {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
-                    <div className="max-h-96 overflow-y-auto">
+                    <div className="max-h-96 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pr-2">
                       {attempts.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
                           <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
@@ -496,7 +496,7 @@ export default function ExamTracker({ session, onClose }: ExamTrackerProps) {
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="p-0">
-                    <div className="max-h-96 overflow-y-auto">
+                    <div className="max-h-96 overflow-y-auto scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100 pr-2">
                       {cheatingIncidents.length === 0 ? (
                         <div className="text-center py-8 text-gray-500">
                           <Shield className="w-12 h-12 mx-auto mb-4 opacity-50 text-green-500" />

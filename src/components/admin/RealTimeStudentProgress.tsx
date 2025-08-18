@@ -379,7 +379,7 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
           </div>
 
           {/* Student List */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="flex-1 overflow-y-auto p-6 max-h-[calc(100vh-350px)] scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
             {loading ? (
               <div className="text-center py-8">
                 <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -391,7 +391,7 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
                 <p>No students have joined this session yet.</p>
               </div>
             ) : (
-              <div className="grid gap-4">
+              <div className="grid gap-4 pr-2">
                 <AnimatePresence>
                   {students.map((student) => (
                     <motion.div

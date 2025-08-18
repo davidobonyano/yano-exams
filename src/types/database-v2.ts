@@ -72,6 +72,7 @@ export interface Question {
   correct_answer: string
   points: number
   explanation?: string
+  image_data?: string // Base64 encoded image data integrated into question
   created_at: string
 }
 
