@@ -147,6 +147,11 @@ export function validateStudentAnswer(
     return studentAnswer.toUpperCase() === shuffledQuestion.shuffled_correct_answer.toUpperCase()
   }
   
+  // For true/false with options (A: True, B: False format), check against shuffled answer
+  if (shuffledQuestion.question_type === 'true_false' && shuffledQuestion.shuffled_correct_answer) {
+    return studentAnswer.toUpperCase() === shuffledQuestion.shuffled_correct_answer.toUpperCase()
+  }
+  
   // For other types, check against original correct answer
   return studentAnswer.toLowerCase().trim() === shuffledQuestion.original_correct_answer.toLowerCase().trim()
 }

@@ -202,7 +202,7 @@ export default function SendWarningModal({
                   </div>
                 </CardHeader>
 
-                <CardContent className="p-6 space-y-4">
+                <CardContent className="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
                   {/* Warning Type Toggle */}
                   <div className="flex gap-2">
                     <Button

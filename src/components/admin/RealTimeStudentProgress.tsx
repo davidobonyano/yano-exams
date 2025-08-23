@@ -74,9 +74,9 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
 
       // First, get all teacher's students for this class level to pre-populate
       const { data: allTeacherStudents, error: teacherStudentsError } = await supabase
-        .from('teacher_students')
+        .from('school_students')
         .select('*')
-        .eq('teacher_id', session.teacher_id)
+        .eq('created_by', session.teacher_id)
         .eq('class_level', session.class_level)
         .eq('is_active', true)
 

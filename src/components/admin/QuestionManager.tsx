@@ -29,7 +29,7 @@ import toast from 'react-hot-toast'
 interface Question {
   id: string
   question_text: string
-  question_type: 'multiple_choice' | 'true_false' | 'short_answer'
+  question_type: 'multiple_choice' | 'true_false' | 'short_answer' | 'fill_in_gap' | 'subjective'
   options: { [key: string]: string } | null
   correct_answer: string
   points: number
@@ -54,7 +54,7 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
 
   // Form states
   const [questionText, setQuestionText] = useState('')
-  const [questionType, setQuestionType] = useState<'multiple_choice' | 'true_false' | 'short_answer'>('multiple_choice')
+  const [questionType, setQuestionType] = useState<'multiple_choice' | 'true_false' | 'short_answer' | 'fill_in_gap' | 'subjective'>('multiple_choice')
   const [options, setOptions] = useState<{ [key: string]: string }>({ A: '', B: '', C: '', D: '' })
   const [correctAnswer, setCorrectAnswer] = useState('')
   const [points, setPoints] = useState(1)
@@ -63,6 +63,66 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState('')
   const [processingImage, setProcessingImage] = useState(false)
+
+  // Add function to update database question types
+  const updateDatabaseQuestionTypes = async () => {
+    try {
+      // Get the current session token
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      if (!session?.access_token) {
+        toast.error('Please log in to update database types')
+        return
+      }
+
+      const response = await fetch('/api/admin/run-sql-script', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${session.access_token}`,
+        },
+      })
+      
+      const result = await response.json()
+      
+      if (result.success) {
+        // Show detailed status information
+        if (result.status) {
+          const status = result.status
+          let message = ''
+          
+          if (status.database_status === 'fully_updated') {
+            message = '✅ All question types are working!'
+            toast.success(message)
+          } else if (status.database_status === 'partially_updated') {
+            message = '⚠️ Some question types need database updates'
+            toast(message, { icon: '⚠️' })
+          } else if (status.database_status === 'needs_update') {
+            message = '❌ Database needs to be updated'
+            toast.error(message)
+          }
+          
+          // Log detailed status to console
+          console.log('Database Status:', status)
+          console.log('Recommendations:', status.recommendations)
+          
+          // Show recommendations in a more detailed way
+          if (status.recommendations.length > 0) {
+            setTimeout(() => {
+              toast.success(`Status: ${status.recommendations.join(' | ')}`)
+            }, 1000)
+          }
+        } else {
+          toast.success('Database status checked successfully!')
+        }
+      } else {
+        toast.error('Failed to check database: ' + (result.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Error updating database:', error)
+      toast.error('Failed to update database question types')
+    }
+  }
 
   useEffect(() => {
     fetchQuestions()
@@ -347,7 +407,7 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
       let correct_answer = ''
       let points = 1
       let explanation = ''
-      let question_type: 'multiple_choice' | 'true_false' | 'short_answer' = 'multiple_choice'
+      let question_type: 'multiple_choice' | 'true_false' | 'short_answer' | 'fill_in_gap' | 'subjective' = 'multiple_choice'
 
       lines.forEach(line => {
         if (line.startsWith('Q:')) {
@@ -366,9 +426,24 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
 
       // Determine question type based on options and answers
       if (Object.keys(options).length > 0) {
-        question_type = 'multiple_choice'
+        // Check if it's true/false with A: True, B: False format
+        if (Object.keys(options).length === 2 && 
+            (Object.values(options).includes('True') || Object.values(options).includes('False'))) {
+          question_type = 'true_false'
+        } else {
+          question_type = 'multiple_choice'
+        }
       } else if (correct_answer.toLowerCase() === 'true' || correct_answer.toLowerCase() === 'false') {
         question_type = 'true_false'
+      } else if (question_text.toLowerCase().includes('fill in the gap') || 
+                 question_text.toLowerCase().includes('fill in the blank') ||
+                 question_text.toLowerCase().includes('_____')) {
+        question_type = 'fill_in_gap'
+      } else if (question_text.toLowerCase().includes('explain') || 
+                 question_text.toLowerCase().includes('describe') ||
+                 question_text.toLowerCase().includes('discuss') ||
+                 question_text.toLowerCase().includes('write')) {
+        question_type = 'subjective'
       } else {
         question_type = 'short_answer'
       }
@@ -456,6 +531,15 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                 Bulk Import
               </MagneticButton>
 
+              <MagneticButton
+                onClick={updateDatabaseQuestionTypes}
+                variant="outline"
+                className="px-6 py-3 rounded-xl border-orange-300 text-orange-600 hover:bg-orange-50"
+              >
+                <HelpCircle className="w-5 h-5 mr-2" />
+                Update DB Types
+              </MagneticButton>
+
               <div className="ml-auto text-sm text-gray-600 flex items-center">
                 <Shuffle className="w-4 h-4 mr-2" />
                 Questions will be shuffled per student
@@ -464,7 +548,28 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
           </div>
 
           {/* Questions List */}
-          <div className="p-6 max-h-96 overflow-y-auto">
+          <div className="p-6">
+            {/* Database Update Notice */}
+            <div className="mb-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <HelpCircle className="w-4 h-4 text-orange-600" />
+                  <span className="text-sm text-orange-800">
+                    <strong>Database Update Required:</strong> New question types (fill-in-gap, subjective) need database functions to be added.
+                  </span>
+                </div>
+                <MagneticButton
+                  onClick={updateDatabaseQuestionTypes}
+                  variant="outline"
+                  size="sm"
+                  className="px-3 py-1 text-xs border-orange-300 text-orange-600 hover:bg-orange-100"
+                >
+                  Fix Now
+                </MagneticButton>
+              </div>
+            </div>
+            
+            <div className="max-h-96 overflow-y-auto">
             {loading ? (
               <div className="text-center py-8">
                 <div className="animate-spin w-8 h-8 border-2 border-blue-500 border-t-transparent rounded-full mx-auto mb-4"></div>
@@ -487,7 +592,9 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                               Q{index + 1}
                             </span>
                             <span className="text-sm text-gray-500">
-                              {question.question_type.replace('_', ' ')} • {question.points} pts
+                              {question.question_type === 'fill_in_gap' ? 'Fill in Gap' : 
+                               question.question_type === 'subjective' ? 'Subjective' :
+                               question.question_type.replace('_', ' ')} • {question.points} pts
                             </span>
                           </div>
                           <div className="mb-2">
@@ -549,6 +656,7 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                 ))}
               </div>
             )}
+            </div>
           </div>
 
           {/* Add/Edit Question Modal */}
@@ -589,10 +697,30 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                       placeholder="Enter your question here..."
                     />
 
+                    <div className="mb-4 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                      <p className="text-xs text-gray-600 mb-2">
+                        <strong>💡 Tip:</strong> Choose the question type that best fits your question format
+                      </p>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-gray-600">
+                        <div>
+                          <span className="font-medium">📋 Multiple Choice:</span> A, B, C, D options
+                        </div>
+                        <div>
+                          <span className="font-medium">✅ True/False:</span> True or False answer
+                        </div>
+                        <div>
+                          <span className="font-medium">🕳️ Fill in Gap:</span> Blank space (_____) to fill
+                        </div>
+                        <div>
+                          <span className="font-medium">📝 Subjective:</span> Essay/explanation questions
+                        </div>
+                      </div>
+                    </div>
+                    
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
                         <Label>Question Type</Label>
-                        <Select value={questionType} onValueChange={(value: 'multiple_choice' | 'true_false' | 'short_answer') => {
+                        <Select value={questionType} onValueChange={(value: 'multiple_choice' | 'true_false' | 'short_answer' | 'fill_in_gap' | 'subjective') => {
                           setQuestionType(value)
                           setCorrectAnswer('') // Reset correct answer when type changes
                           if (value === 'multiple_choice') {
@@ -606,6 +734,8 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                             <SelectItem value="multiple_choice">📋 Multiple Choice</SelectItem>
                             <SelectItem value="true_false">✅ True/False</SelectItem>
                             <SelectItem value="short_answer">✍️ Short Answer</SelectItem>
+                            <SelectItem value="fill_in_gap">🕳️ Fill in the Gap</SelectItem>
+                            <SelectItem value="subjective">📝 Subjective/Essay</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
@@ -661,6 +791,33 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                             <SelectItem value="False">❌ False</SelectItem>
                           </SelectContent>
                         </Select>
+                      </div>
+                    ) : questionType === 'fill_in_gap' ? (
+                      <div className="space-y-2">
+                        <Label>Correct Answer</Label>
+                        <FloatingInput
+                          label="Correct Answer"
+                          value={correctAnswer}
+                          onChange={(e) => setCorrectAnswer(e.target.value)}
+                          placeholder="Enter the correct word/phrase to fill the gap..."
+                        />
+                        <p className="text-xs text-gray-500">
+                          Enter the exact word or phrase that should fill the blank in your question.
+                        </p>
+                      </div>
+                    ) : questionType === 'subjective' ? (
+                      <div className="space-y-2">
+                        <Label>Sample Answer (Optional)</Label>
+                        <textarea
+                          value={correctAnswer}
+                          onChange={(e) => setCorrectAnswer(e.target.value)}
+                          placeholder="Enter a sample answer or key points for manual grading..."
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                          rows={3}
+                        />
+                        <p className="text-xs text-gray-500">
+                          This is for reference only. Subjective questions require manual grading.
+                        </p>
                       </div>
                     ) : (
                       <FloatingInput
@@ -787,6 +944,26 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                     </button>
                   </div>
 
+                  <div className="mb-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <h4 className="font-medium text-blue-800 mb-3">📚 Question Type Guide</h4>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-blue-700">
+                      <div>
+                        <p className="font-medium">📋 Multiple Choice:</p>
+                        <p className="text-xs">Include A:, B:, C:, D: options</p>
+                        <p className="font-medium">✅ True/False:</p>
+                        <p className="text-xs">Use "Correct: True" or "Correct: False"</p>
+                        <p className="font-medium">🕳️ Fill in the Gap:</p>
+                        <p className="text-xs">Include "_____" or "fill in the gap" in question</p>
+                      </div>
+                      <div>
+                        <p className="font-medium">✍️ Short Answer:</p>
+                        <p className="text-xs">Simple text questions without options</p>
+                        <p className="font-medium">📝 Subjective/Essay:</p>
+                        <p className="text-xs">Include "explain", "describe", "discuss" in question</p>
+                      </div>
+                    </div>
+                  </div>
+                  
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium mb-2">Paste Questions</label>
@@ -814,6 +991,14 @@ Explanation: Basic addition
 Q: Is the earth round?
 Correct: True
 Points: 1
+---
+Q: Fill in the gap: The capital of Nigeria is _____.
+Correct: Abuja
+Points: 2
+---
+Q: Explain the importance of education in personal development.
+Correct: Education provides knowledge, critical thinking skills, and opportunities for career advancement.
+Points: 3
 ---`}</pre>
                         <div className="mb-4 text-xs text-green-600 font-semibold">Option 2: Without separators (auto-detect)</div>
                         <pre>{`Q: What gas do plants absorb?
@@ -828,7 +1013,13 @@ Correct: Abuja
 Points: 2
 Q: Is water wet?
 Correct: True
-Points: 1`}</pre>
+Points: 1
+Q: Fill in the blank: Water boils at _____ degrees Celsius.
+Correct: 100
+Points: 1
+Q: Describe the water cycle process.
+Correct: The water cycle involves evaporation, condensation, precipitation, and collection.
+Points: 2`}</pre>
                       </div>
                     </div>
                   </div>
@@ -933,6 +1124,22 @@ Points: 1`}</pre>
                         <div className="mt-4">
                           <div className="w-full p-4 border-2 border-gray-200 rounded-xl bg-gray-50">
                             <span className="text-gray-500 italic">Student will type their answer here...</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {previewQuestion.question_type === 'fill_in_gap' && (
+                        <div className="mt-4">
+                          <div className="w-full p-4 border-2 border-gray-200 rounded-xl bg-gray-50">
+                            <span className="text-gray-500 italic">Student will fill in the blank space...</span>
+                          </div>
+                        </div>
+                      )}
+
+                      {previewQuestion.question_type === 'subjective' && (
+                        <div className="mt-4">
+                          <div className="w-full p-4 border-2 border-gray-200 rounded-xl bg-gray-50">
+                            <span className="text-gray-500 italic">Student will write their essay/explanation here...</span>
                           </div>
                         </div>
                       )}

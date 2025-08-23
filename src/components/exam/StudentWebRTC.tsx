@@ -85,6 +85,14 @@ export default function StudentWebRTC({ studentId, onStreamReady, onCleanupRef, 
               onStreamStopped?.();
             }
           })
+          .on('broadcast', { event: 'camera_manual_control' }, (payload) => {
+            console.log('🎥 MANUAL CAMERA CONTROL RECEIVED:', payload);
+            if (payload.payload.attempt_id === attemptId) {
+              console.log('🎥 MANUAL CAMERA DISABLE - Force cleaning up camera immediately');
+              cleanup();
+              onStreamStopped?.();
+            }
+          })
           .subscribe();
           
         pc.onicecandidate = (e) => {

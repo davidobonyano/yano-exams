@@ -565,7 +565,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
             </button>
             
             <button
-              onClick={() => setShowStudentManagement(true)}
+                              onClick={() => setShowStudentManagement(true)}
               className="group relative bg-gradient-to-br from-blue-500 to-cyan-600 hover:from-blue-600 hover:to-cyan-700 text-white p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
             >
               <div className="flex flex-col items-center text-center space-y-3">

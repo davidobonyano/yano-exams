@@ -209,11 +209,11 @@ export default function SimpleStudentLogin({ onLoginSuccess, onStartDemo }: Stud
                     value={studentId}
                     onChange={(e) => setStudentId(e.target.value.toUpperCase())}
                     onKeyPress={handleKeyPress}
-                    placeholder="JSS1A-001"
+                    placeholder="YAN001"
                     className="font-mono text-center h-12"
                   />
                   <p className="text-xs text-gray-500 mt-2 text-center">
-                    Your unique student ID (e.g., JSS1A-001)
+                    Your unique student ID (e.g., YAN001, YAN002)
                   </p>
                 </motion.div>
 
@@ -271,7 +271,7 @@ export default function SimpleStudentLogin({ onLoginSuccess, onStartDemo }: Stud
                       <div className="w-6 h-6 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold text-xs">
                         2
                       </div>
-                      <span>Enter your Student ID (e.g., JSS1A-001)</span>
+                      <span>Enter your Student ID (e.g., YAN001, YAN002)</span>
                     </div>
                     <div className="flex items-center space-x-3">
                       <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center text-white font-bold text-xs">

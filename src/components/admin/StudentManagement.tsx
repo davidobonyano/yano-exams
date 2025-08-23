@@ -78,7 +78,52 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
   const [parentName, setParentName] = useState('')
   const [parentPhone, setParentPhone] = useState('')
   const [bulkText, setBulkText] = useState('')
-  const [customSection, setCustomSection] = useState('A')
+  const [selectedCustomId, setSelectedCustomId] = useState('')
+
+  // Function to get next available YAN ID
+  const getNextAvailableId = () => {
+    if (students.length === 0) return 'YAN001'
+    
+    // Extract numbers from existing IDs and find the next one
+    const existingNumbers = students
+      .map(s => {
+        const match = s.student_id.match(/YAN(\d+)/)
+        return match ? parseInt(match[1]) : 0
+      })
+      .filter(num => num > 0)
+      .sort((a, b) => a - b)
+    
+    if (existingNumbers.length === 0) return 'YAN001'
+    
+    // Find the first gap or next number
+    let nextNumber = 1
+    for (const num of existingNumbers) {
+      if (num !== nextNumber) break
+      nextNumber++
+    }
+    
+    return `YAN${nextNumber.toString().padStart(3, '0')}`
+  }
+
+  // Function to get available IDs (including gaps from deleted students)
+  const getAvailableIds = () => {
+    const availableIds: string[] = []
+    
+    // Generate IDs 1-1000
+    for (let i = 1; i <= 1000; i++) {
+      const id = `YAN${i.toString().padStart(3, '0')}`
+      
+      // Check if this ID is already taken
+      const isTaken = students.some(s => s.student_id === id)
+      
+      if (!isTaken) {
+        availableIds.push(id)
+      }
+    }
+    
+    // Return only first 50 available IDs to keep dropdown manageable
+    return availableIds.slice(0, 50)
+  }
 
   useEffect(() => {
     fetchStudents()
@@ -87,9 +132,8 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
   const fetchStudents = async () => {
     try {
       const { data, error } = await supabase
-        .from('teacher_students')
+        .from('school_students')
         .select('*')
-        .eq('teacher_id', teacherId)
         .order('created_at', { ascending: false })
 
       if (error) throw error
@@ -110,6 +154,7 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
     setPhone('')
     setParentName('')
     setParentPhone('')
+    setSelectedCustomId('')
     setEditingStudent(null)
   }
 
@@ -120,23 +165,47 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
     }
 
     try {
-      const { data, error } = await supabase.rpc('add_student_to_class', {
-        p_teacher_id: teacherId,
-        p_full_name: fullName.trim(),
-        p_class_level: classLevel,
-        p_school_name: schoolName.trim(),
-        p_email: email.trim() || null,
-        p_phone: phone.trim() || null,
-        p_parent_name: parentName.trim() || null,
-        p_parent_phone: parentPhone.trim() || null,
-        p_section: customSection || 'A'
-      })
+      let result
+      
+      if (selectedCustomId) {
+        // Use custom ID if selected
+        const { data, error } = await supabase
+          .from('school_students')
+          .insert({
+            student_id: selectedCustomId,
+            full_name: fullName.trim(),
+            class_level: classLevel,
+            school_name: schoolName.trim(),
+            email: email.trim() || null,
+            phone: phone.trim() || null,
+            parent_name: parentName.trim() || null,
+            parent_phone: parentPhone.trim() || null,
+            created_by: teacherId
+          })
+          .select()
+          .single()
+        
+        if (error) throw error
+        result = { success: true, student: data }
+      } else {
+        // Use automatic ID generation
+        const { data, error } = await supabase.rpc('add_school_student', {
+          p_full_name: fullName.trim(),
+          p_class_level: classLevel,
+          p_school_name: schoolName.trim(),
+          p_teacher_id: teacherId,
+          p_email: email.trim() || null,
+          p_phone: phone.trim() || null,
+          p_parent_name: parentName.trim() || null,
+          p_parent_phone: parentPhone.trim() || null
+        })
 
-      if (error) throw error
+        if (error) throw error
+        result = data
+      }
 
-      const result = data
       if (!result.success) {
-        toast.error(result.error)
+        toast.error(result.error || 'Failed to add student')
         return
       }
 
@@ -158,7 +227,7 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
 
     try {
       const { error } = await supabase
-        .from('teacher_students')
+        .from('school_students')
         .update({
           full_name: fullName.trim(),
           class_level: classLevel,
@@ -187,7 +256,7 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
 
     try {
       const { error } = await supabase
-        .from('teacher_students')
+        .from('school_students')
         .delete()
         .eq('id', studentId)
 
@@ -220,16 +289,15 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
 
       for (const student of studentsToImport) {
         try {
-          const { data, error } = await supabase.rpc('add_student_to_class', {
-            p_teacher_id: teacherId,
+          const { data, error } = await supabase.rpc('add_school_student', {
             p_full_name: student.full_name,
             p_class_level: student.class_level,
             p_school_name: student.school_name,
+            p_teacher_id: teacherId,
             p_email: student.email,
             p_phone: student.phone,
             p_parent_name: student.parent_name,
-            p_parent_phone: student.parent_phone,
-            p_section: customSection
+            p_parent_phone: student.parent_phone
           })
 
           if (error) throw error
@@ -565,36 +633,43 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
 
                   <div className="space-y-6">
                     {!editingStudent && (
-                      <div className="bg-blue-50 p-4 rounded-xl">
-                        <h4 className="font-medium mb-2 flex items-center">
+                      <div className="bg-blue-50 p-4 rounded-xl border border-blue-200">
+                        <h4 className="font-medium mb-2 flex items-center text-blue-800">
                           <Hash className="w-4 h-4 mr-2" />
-                          Student ID Settings
+                          Student ID Management
                         </h4>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Class Section</label>
-                            <select
-                              value={customSection}
-                              onChange={(e) => setCustomSection(e.target.value)}
-                              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                            >
-                              <option value="A">Section A</option>
-                              <option value="B">Section B</option>
-                              <option value="C">Section C</option>
-                              <option value="D">Section D</option>
-                              <option value="E">Section E</option>
-                            </select>
-                          </div>
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">ID Preview</label>
-                            <div className="px-3 py-2 bg-gray-100 border border-gray-300 rounded-lg font-mono">
-                              {classLevel}{customSection}-001
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Next Available ID</label>
+                              <div className="px-3 py-2 bg-white border border-gray-300 rounded-lg font-mono text-gray-800 text-lg text-center">
+                                {getNextAvailableId()}
+                              </div>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Assign Specific ID</label>
+                              <select
+                                value={selectedCustomId}
+                                onChange={(e) => setSelectedCustomId(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                              >
+                                <option value="">Auto-assign next available</option>
+                                {getAvailableIds().map(id => (
+                                  <option key={id} value={id}>{id}</option>
+                                ))}
+                              </select>
                             </div>
                           </div>
+                          <div className="text-sm text-gray-600 bg-white p-3 rounded-lg border border-gray-200">
+                            <p className="mb-2"><strong>System Features:</strong></p>
+                            <ul className="space-y-1 text-xs">
+                              <li>• <strong>Automatic:</strong> System assigns next sequential ID (YAN001, YAN002, etc.)</li>
+                              <li>• <strong>Manual:</strong> Choose specific ID from dropdown for reusing deleted numbers</li>
+                              <li>• <strong>Flexible:</strong> Works across all class levels</li>
+                              <li>• <strong>Efficient:</strong> No duplicate IDs, maintains data integrity</li>
+                            </ul>
+                          </div>
                         </div>
-                        <p className="text-sm text-gray-600 mt-2">
-                          Students will get IDs like: {classLevel}{customSection}-001, {classLevel}{customSection}-002, etc.
-                        </p>
                       </div>
                     )}
 
@@ -714,24 +789,6 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
 
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div>
-                      <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">Class Section for All Students</label>
-                        <select
-                          value={customSection}
-                          onChange={(e) => setCustomSection(e.target.value)}
-                          className="w-full max-w-40 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                        >
-                          <option value="A">Section A</option>
-                          <option value="B">Section B</option>
-                          <option value="C">Section C</option>
-                          <option value="D">Section D</option>
-                          <option value="E">Section E</option>
-                        </select>
-                        <p className="text-sm text-gray-600 mt-1">
-                          All imported students will be assigned to this section
-                        </p>
-                      </div>
-                      
                       <label className="block text-sm font-medium mb-2">Paste Student Data</label>
                       <textarea
                         value={bulkText}

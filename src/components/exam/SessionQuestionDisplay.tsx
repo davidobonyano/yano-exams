@@ -39,32 +39,55 @@ export default function SessionQuestionDisplay({ question, answer, onAnswerChang
   }
 
   const renderTrueFalse = () => {
-    return (
-      <div className="space-y-3">
-        <label className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
-          <input
-            type="radio"
-            name={`question_${question.id}`}
-            value="true"
-            checked={answer === 'true'}
-            onChange={(e) => onAnswerChange(e.target.value)}
-            className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
-          />
-          <span className="text-gray-700">True</span>
-        </label>
-        <label className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
-          <input
-            type="radio"
-            name={`question_${question.id}`}
-            value="false"
-            checked={answer === 'false'}
-            onChange={(e) => onAnswerChange(e.target.value)}
-            className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
-          />
-          <span className="text-gray-700">False</span>
-        </label>
-      </div>
-    )
+    // Check if question has options (A: True, B: False format) or is direct true/false
+    if (question.options && Object.keys(question.options).length > 0) {
+      // Format: A: True, B: False
+      return (
+        <div className="space-y-3">
+          {Object.entries(question.options).map(([key, value]) => (
+            <label key={key} className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+              <input
+                type="radio"
+                name={`question_${question.id}`}
+                value={key}
+                checked={answer === key}
+                onChange={(e) => onAnswerChange(e.target.value)}
+                className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+              />
+              <span className="text-gray-700">{value}</span>
+            </label>
+          ))}
+        </div>
+      )
+    } else {
+      // Direct true/false format
+      return (
+        <div className="space-y-3">
+          <label className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+            <input
+              type="radio"
+              name={`question_${question.id}`}
+              value="true"
+              checked={answer === 'true'}
+              onChange={(e) => onAnswerChange(e.target.value)}
+              className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+            />
+            <span className="text-gray-700">True</span>
+          </label>
+          <label className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
+            <input
+              type="radio"
+              name={`question_${question.id}`}
+              value="false"
+              checked={answer === 'false'}
+              onChange={(e) => onAnswerChange(e.target.value)}
+              className="h-4 w-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+            />
+            <span className="text-gray-700">False</span>
+          </label>
+        </div>
+      )
+    }
   }
 
   const renderShortAnswer = () => {
@@ -79,6 +102,40 @@ export default function SessionQuestionDisplay({ question, answer, onAnswerChang
     )
   }
 
+  const renderFillInGap = () => {
+    return (
+      <div className="space-y-3">
+        <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+          <p>Fill in the blank with the correct answer:</p>
+        </div>
+        <input
+          type="text"
+          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+          placeholder="Type your answer here..."
+          value={answer}
+          onChange={(e) => onAnswerChange(e.target.value)}
+        />
+      </div>
+    )
+  }
+
+  const renderSubjective = () => {
+    return (
+      <div className="space-y-3">
+        <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+          <p>Write a detailed answer to this question:</p>
+        </div>
+        <textarea
+          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+          rows={6}
+          placeholder="Write your detailed answer here..."
+          value={answer}
+          onChange={(e) => onAnswerChange(e.target.value)}
+        />
+      </div>
+    )
+  }
+
   const renderAnswerSection = () => {
     switch (question.question_type) {
       case 'multiple_choice':
@@ -87,6 +144,10 @@ export default function SessionQuestionDisplay({ question, answer, onAnswerChang
         return renderTrueFalse()
       case 'short_answer':
         return renderShortAnswer()
+      case 'fill_in_gap':
+        return renderFillInGap()
+      case 'subjective':
+        return renderSubjective()
       default:
         return null
     }

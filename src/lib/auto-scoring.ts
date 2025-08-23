@@ -226,12 +226,30 @@ export async function validateAndMarkAnswers(
       if (question.question_type === 'multiple_choice') {
         isCorrect = answer.answer.toUpperCase() === question.correct_answer.toUpperCase()
       } else if (question.question_type === 'true_false') {
-        isCorrect = answer.answer.toUpperCase() === question.correct_answer.toUpperCase()
+        // Handle both A: True, B: False format and direct true/false format
+        if (question.options && Object.keys(question.options).length > 0) {
+          // Format: A: True, B: False - check if student selected the correct option
+          isCorrect = answer.answer.toUpperCase() === question.correct_answer.toUpperCase()
+        } else {
+          // Direct true/false format
+          isCorrect = answer.answer.toLowerCase() === question.correct_answer.toLowerCase()
+        }
       } else if (question.question_type === 'short_answer') {
         // Simple text comparison - could be enhanced with fuzzy matching
         const studentAnswer = answer.answer.toLowerCase().trim()
         const correctAnswer = question.correct_answer.toLowerCase().trim()
         isCorrect = studentAnswer === correctAnswer
+      } else if (question.question_type === 'fill_in_gap') {
+        // For fill-in-the-gap, do case-insensitive comparison
+        const studentAnswer = answer.answer.toLowerCase().trim()
+        const correctAnswer = question.correct_answer.toLowerCase().trim()
+        isCorrect = studentAnswer === correctAnswer
+      } else if (question.question_type === 'subjective') {
+        // For subjective questions, we can't auto-score - mark as needs manual review
+        // For now, we'll give partial credit if they write something substantial
+        const studentAnswer = answer.answer.trim()
+        isCorrect = studentAnswer.length > 10 // Give credit for substantial answers
+        pointsEarned = isCorrect ? Math.min(question.points || 1, 1) : 0 // Max 1 point for auto-scoring
       }
 
       if (isCorrect) {

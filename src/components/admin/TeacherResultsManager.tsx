@@ -69,6 +69,7 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
   const [selectedStudentDetails, setSelectedStudentDetails] = useState<DetailedStudentResult | null>(null)
   const [showStudentDetails, setShowStudentDetails] = useState(false)
 
+
   useEffect(() => {
     if (teacherId) {
       loadResults()
@@ -307,6 +308,8 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
     }
   }
 
+
+
   const filteredResults = results.filter(result => {
     const matchesSearch = result.students.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          result.students.student_id.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -413,6 +416,7 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
                         <><Send className="w-4 h-4 mr-2" /> Send All Emails</>
                       )}
                     </Button>
+
                   </div>
                 </div>
               </CardHeader>
@@ -478,6 +482,7 @@ export default function TeacherResultsManager({ teacherId }: TeacherResultsManag
                             <Eye className="w-3 h-3 mr-1" /> View Details
                             </Button>
                           </Link>
+
                           <div className="flex flex-col space-y-1">
                             <div className="flex items-center space-x-2">
                             <Input

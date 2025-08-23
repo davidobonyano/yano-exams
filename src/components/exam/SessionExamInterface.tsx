@@ -14,7 +14,7 @@ import { Badge } from '@/components/ui/badge'
 import { calculateAndSaveScore, validateAndMarkAnswers } from '@/lib/auto-scoring'
 import { AnimatedBackground } from '@/components/ui/animated-background'
 import { VideoStream } from '@/components/ui/video-stream'
-import { Clock, AlertTriangle, Wifi, WifiOff, BookOpen, CheckCircle, Circle, ArrowLeft, ArrowRight, Send, Eye, EyeOff, Timer, Target, Zap, Camera, BarChart3, ChevronLeft, ChevronRight, RotateCcw, Flag, Mic } from 'lucide-react'
+import { Clock, AlertTriangle, Wifi, WifiOff, BookOpen, CheckCircle, Circle, ArrowLeft, ArrowRight, Send, Eye, EyeOff, Timer, Target, Zap, Camera, CameraOff, BarChart3, ChevronLeft, ChevronRight, RotateCcw, Flag, Mic } from 'lucide-react'
 import { useCheatingDetection } from '@/hooks/useCheatingDetection'
 import PersistentExamTimer from './PersistentExamTimer'
 import SessionQuestionDisplay from './SessionQuestionDisplay'
@@ -819,6 +819,45 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                 <p className="text-gray-600 mb-6">
                   Your exam has been submitted and your camera has been turned off automatically.
                 </p>
+                
+                {/* Manual Camera Off Button */}
+                <div className="mb-6">
+                  <Button
+                    onClick={async () => {
+                      try {
+                        // Force stop any remaining camera streams
+                        if (cameraStream) {
+                          cameraStream.getTracks().forEach(track => {
+                            track.stop()
+                            console.log('🛑 MANUAL: Stopped track:', track.kind)
+                          })
+                          setCameraStream(null)
+                        }
+                        
+                        // Update database to ensure camera is disabled
+                        if (attempt?.id) {
+                          await supabase
+                            .from('student_exam_attempts')
+                            .update({ camera_enabled: false })
+                            .eq('id', attempt.id)
+                        }
+                        
+                        toast.success('Camera turned off manually!')
+                      } catch (error) {
+                        console.error('Error turning off camera:', error)
+                        toast.error('Failed to turn off camera')
+                      }
+                    }}
+                    variant="outline"
+                    className="border-orange-200 text-orange-700 hover:bg-orange-50"
+                  >
+                    <CameraOff className="w-4 h-4 mr-2" />
+                    Turn Off Camera Manually
+                  </Button>
+                  <p className="text-xs text-gray-500 mt-2">
+                    If your camera light is still on, click this button to turn it off manually.
+                  </p>
+                </div>
               </motion.div>
 
               <motion.div
