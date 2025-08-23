@@ -5,11 +5,13 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 import { Exam, Question, UserExamAttempt, UserAnswer } from '@/types/database'
+import { CheckCircle } from 'lucide-react'
 import PersistentExamTimer from './PersistentExamTimer'
 import QuestionDisplay from './QuestionDisplay'
 import ExamInstructions from './ExamInstructions'
 import DemoExam from './DemoExam'
 import StudentWarningDisplay from './StudentWarningDisplay'
+import SubmitConfirmationModal from './SubmitConfirmationModal'
 import { calculateAndSaveScore, validateAndMarkAnswers } from '@/lib/auto-scoring'
 
 interface ExamInterfaceProps {
@@ -25,7 +27,6 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
   const [savingAnswer, setSavingAnswer] = useState(false)
   const [error, setError] = useState('')
   const [warnings, setWarnings] = useState<string[]>([])
@@ -35,6 +36,10 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
   const [upcomingExams, setUpcomingExams] = useState<Array<{title: string, date: string, duration: number}>>([])
   const [loadingUpcoming, setLoadingUpcoming] = useState(true)
   const [examStarted, setExamStarted] = useState(false)
+  
+  // New submission flow states
+  const [showSubmitModal, setShowSubmitModal] = useState(false)
+  const [submissionState, setSubmissionState] = useState<'idle' | 'confirming' | 'submitting' | 'submitted'>('idle')
 
   const warningShown = useRef(false)
   const tabSwitchCount = useRef(0)
@@ -353,7 +358,7 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
     if (!attempt || !exam) return
 
     try {
-      setSubmitting(true)
+      setSubmissionState('submitting')
 
       // Update attempt status
       const { error: updateError } = await supabase
@@ -387,19 +392,41 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
         console.error('Failed to calculate exam score:', scoringResult.error)
       }
 
-      // Redirect to dashboard instead of results (results are now teacher-controlled)
-      router.push('/dashboard?examSubmitted=true')
+      // Set submitted state
+      setSubmissionState('submitted')
+      
+      // For standalone exams, show results after submission
+      // Wait a moment to show the submitted state, then redirect to results
+      setTimeout(() => {
+        router.push(`/results/${attempt.id}`)
+      }, 2000)
     } catch (err: unknown) {
       console.error('Error submitting exam:', err)
       setError(err instanceof Error ? err.message : 'Failed to submit exam')
-    } finally {
-      setSubmitting(false)
+      setSubmissionState('idle')
     }
   }
 
   const handleTimeUp = useCallback(async () => {
+    // Auto-submit when time is up
+    setSubmissionState('submitting')
     await submitExam()
   }, [attempt, exam])
+
+  const handleSubmitClick = () => {
+    setSubmissionState('confirming')
+    setShowSubmitModal(true)
+  }
+
+  const handleSubmitConfirm = async () => {
+    setShowSubmitModal(false)
+    await submitExam()
+  }
+
+  const handleSubmitCancel = () => {
+    setShowSubmitModal(false)
+    setSubmissionState('idle')
+  }
 
   if (loading) {
     return (
@@ -502,6 +529,25 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
         </div>
       )}
 
+      {/* Submission Status */}
+      {submissionState === 'submitting' && (
+        <div className="bg-blue-500 text-white text-center py-3">
+          <div className="flex items-center justify-center gap-2">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
+            <p>Submitting your exam... Please wait.</p>
+          </div>
+        </div>
+      )}
+
+      {submissionState === 'submitted' && (
+        <div className="bg-green-500 text-white text-center py-3">
+          <div className="flex items-center justify-center gap-2">
+            <CheckCircle className="w-5 h-5" />
+            <p>Exam submitted successfully! Redirecting to dashboard...</p>
+          </div>
+        </div>
+      )}
+
       {/* Header with Timer */}
       <div className="bg-white shadow-sm border-b border-gray-200">
         <div className="max-w-4xl mx-auto px-4 py-3">
@@ -547,11 +593,12 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
 
             {currentQuestionIndex === questions.length - 1 ? (
               <button
-                onClick={submitExam}
-                disabled={submitting}
+                onClick={handleSubmitClick}
+                disabled={submissionState === 'submitting' || submissionState === 'submitted'}
                 className="px-6 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {submitting ? 'Submitting...' : 'Submit Exam'}
+                {submissionState === 'submitting' ? 'Submitting...' : 
+                 submissionState === 'submitted' ? 'Submitted!' : 'Submit Exam'}
               </button>
             ) : (
               <button
@@ -586,6 +633,16 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
           </div>
         </div>
       </div>
+
+      {/* Submit Confirmation Modal */}
+      <SubmitConfirmationModal
+        isOpen={showSubmitModal}
+        onClose={handleSubmitCancel}
+        onConfirm={handleSubmitConfirm}
+        questionsAnswered={Object.keys(answers).length}
+        totalQuestions={questions.length}
+        timeRemaining={attempt?.time_remaining || 0}
+      />
     </div>
   )
 }

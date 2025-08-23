@@ -299,13 +299,17 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
         .delete()
         .eq('id', questionId)
 
-      if (error) throw error
+      if (error) {
+        console.error('Supabase delete error:', error)
+        throw error
+      }
 
       toast.success('Question deleted successfully!')
       fetchQuestions()
     } catch (error) {
       console.error('Error deleting question:', error)
-      toast.error('Failed to delete question')
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred'
+      toast.error(`Failed to delete question: ${errorMessage}`)
     }
   }
 

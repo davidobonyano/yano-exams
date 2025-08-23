@@ -79,12 +79,28 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
         setTeacher(teacherData)
       }
 
-      // Fetch teacher's exams
-      const { data: examsData, error: examsError } = await supabase
+      // Fetch teacher's exams - try created_by first, fallback to all exams if none found
+      let { data: examsData, error: examsError } = await supabase
         .from('exams')
         .select('*')
         .eq('created_by', user.id)
         .order('created_at', { ascending: false })
+
+      // If no exams found with created_by, fetch all exams (teacher has admin access)
+      if (!examsData || examsData.length === 0) {
+        console.log('No exams found with created_by, fetching all exams')
+        const { data: allExamsData, error: allExamsError } = await supabase
+          .from('exams')
+          .select('*')
+          .order('created_at', { ascending: false })
+        
+        if (allExamsError) {
+          console.error('Error fetching all exams:', allExamsError)
+        } else {
+          examsData = allExamsData
+          examsError = null
+        }
+      }
 
       if (examsError) {
         console.error('Error fetching exams:', examsError)
@@ -147,13 +163,29 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
         setTeacher(teacherData)
       }
 
-      // Fetch teacher's exams
+      // Fetch teacher's exams - try created_by first, fallback to all exams if none found
       console.log('Fetching exams for teacher:', user.id)
-      const { data: examsData, error: examsError } = await supabase
+      let { data: examsData, error: examsError } = await supabase
         .from('exams')
         .select('*')
         .eq('created_by', user.id)
         .order('created_at', { ascending: false })
+
+      // If no exams found with created_by, fetch all exams (teacher has admin access)
+      if (!examsData || examsData.length === 0) {
+        console.log('No exams found with created_by, fetching all exams')
+        const { data: allExamsData, error: allExamsError } = await supabase
+          .from('exams')
+          .select('*')
+          .order('created_at', { ascending: false })
+        
+        if (allExamsError) {
+          console.error('Error fetching all exams:', allExamsError)
+        } else {
+          examsData = allExamsData
+          examsError = null
+        }
+      }
 
       console.log('Exams query result:', { examsData, examsError })
       if (examsError) throw examsError
