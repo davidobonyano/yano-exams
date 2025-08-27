@@ -4,7 +4,7 @@
 interface Question {
   id: string
   question_text: string
-  question_type: 'multiple_choice' | 'true_false' | 'short_answer'
+  question_type: string
   options: { [key: string]: string } | null
   correct_answer: string
   points: number

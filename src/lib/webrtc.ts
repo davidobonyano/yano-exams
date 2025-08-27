@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import { getRtcConfiguration } from './rtcConfig'
 
 export interface WebRTCOffer {
   id: string
@@ -25,15 +26,9 @@ export class StudentWebRTC {
     this.studentId = studentId
     this.teacherId = teacherId
     
-    // Create peer connection with free STUN servers
-    this.peerConnection = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    })
-
-    this.setupPeerConnection()
+    // WebRTC disabled: no peer connection
+    // this.peerConnection = new RTCPeerConnection(getRtcConfiguration())
+    // this.setupPeerConnection()
   }
 
   private setupPeerConnection() {
@@ -51,92 +46,17 @@ export class StudentWebRTC {
   }
 
   async startStreaming(stream: MediaStream) {
+    // WebRTC disabled: no-op
     this.localStream = stream
-    
-    // Add stream to peer connection
-    stream.getTracks().forEach(track => {
-      this.peerConnection.addTrack(track, stream)
-    })
-
-    // Create offer
-    const offer = await this.peerConnection.createOffer({
-      offerToReceiveVideo: true,
-      offerToReceiveAudio: true
-    })
-    
-    await this.peerConnection.setLocalDescription(offer)
-
-    // Store offer in database
-    const { error } = await supabase
-      .from('webrtc_offers')
-      .insert([{
-        session_id: this.sessionId,
-        student_id: this.studentId,
-        teacher_id: this.teacherId,
-        offer_data: offer,
-        status: 'pending'
-      }])
-
-    if (error) {
-      console.error('Error storing WebRTC offer:', error)
-      console.error('Make sure to run the WebRTC database migration first')
-      // Don't throw error, continue without database signaling for now
-      return
-    }
-
-    // Listen for answers
-    this.setupSignaling()
+    return
   }
 
   private setupSignaling() {
-    this.channel = supabase
-      .channel(`webrtc_${this.sessionId}_${this.studentId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'webrtc_offers',
-          filter: `student_id=eq.${this.studentId}`
-        },
-        async (payload) => {
-          const offer = payload.new as WebRTCOffer
-          if (offer.answer_data && !this.peerConnection.remoteDescription) {
-            await this.peerConnection.setRemoteDescription(offer.answer_data)
-          }
-        }
-      )
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'webrtc_ice_candidates',
-          filter: `student_id=eq.${this.studentId}`
-        },
-        async (payload) => {
-          const candidate = payload.new
-          if (candidate.candidate_data) {
-            await this.peerConnection.addIceCandidate(candidate.candidate_data)
-          }
-        }
-      )
-      .subscribe()
+    // WebRTC disabled: no signaling
   }
 
   private async sendIceCandidate(candidate: RTCIceCandidate) {
-    const { error } = await supabase
-      .from('webrtc_ice_candidates')
-      .insert([{
-        session_id: this.sessionId,
-        student_id: this.studentId,
-        teacher_id: this.teacherId,
-        candidate_data: candidate.toJSON()
-      }])
-    
-    if (error) {
-      console.error('Error storing ICE candidate:', error)
-    }
+    // WebRTC disabled
   }
 
   destroy() {
@@ -146,7 +66,7 @@ export class StudentWebRTC {
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => track.stop())
     }
-    this.peerConnection.close()
+    // if (this.peerConnection) this.peerConnection.close()
   }
 }
 
@@ -199,12 +119,8 @@ export class TeacherWebRTC {
   }
 
   private async handleStudentOffer(offer: WebRTCOffer) {
-    const peerConnection = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    })
+    // WebRTC disabled
+    const peerConnection = new RTCPeerConnection(getRtcConfiguration())
 
     // Handle remote stream
     peerConnection.ontrack = (event) => {

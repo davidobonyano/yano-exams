@@ -22,15 +22,9 @@ export class StudentWebRTC {
     this.studentId = studentId
     
     // Create peer connection with STUN servers for NAT traversal
-    this.peerConnection = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
-    })
+    this.peerConnection = new RTCPeerConnection(getRtcConfiguration())
 
-    this.setupPeerConnection()
-    this.setupSignaling()
+    // WebRTC disabled
   }
 
   private setupPeerConnection() {
@@ -81,25 +75,17 @@ export class StudentWebRTC {
 
   async startCamera() {
     try {
-      console.log('📹 Student starting camera and mic...')
+      console.log('📹 Student starting camera (audio disabled)...')
       this.localStream = await navigator.mediaDevices.getUserMedia({
         video: { 
           width: { ideal: 1280 },
           height: { ideal: 720 },
           frameRate: { ideal: 30, max: 30 }
         },
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        }
+        audio: false
       })
 
-      // Add tracks to peer connection
-      this.localStream.getTracks().forEach(track => {
-        console.log('➕ Student adding track:', track.kind)
-        this.peerConnection.addTrack(track, this.localStream!)
-      })
+      // WebRTC disabled: do not add tracks to any peer connection
 
       return this.localStream
     } catch (error) {
@@ -229,12 +215,7 @@ export class TeacherWebRTCNew {
       console.log('📩 Teacher received offer from student:', studentId)
       
       // Create new peer connection for this student
-      const peerConnection = new RTCPeerConnection({
-        iceServers: [
-          { urls: 'stun:stun.l.google.com:19302' },
-          { urls: 'stun:stun1.l.google.com:19302' }
-        ]
-      })
+      const peerConnection = new RTCPeerConnection(getRtcConfiguration())
 
       // Handle incoming stream
       peerConnection.ontrack = (event) => {

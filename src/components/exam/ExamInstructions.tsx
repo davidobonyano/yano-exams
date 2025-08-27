@@ -339,7 +339,7 @@ export default function ExamInstructions({
                                   height: { ideal: 480 },
                                   facingMode: 'user'
                                 },
-                                audio: true
+                                audio: false
                               })
                               onCameraGranted(stream)
                             } catch (err) {

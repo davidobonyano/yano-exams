@@ -172,3 +172,22 @@ COMMENT ON FUNCTION get_real_time_remaining(UUID) IS 'Returns server-authoritati
 COMMENT ON FUNCTION is_exam_time_up(UUID) IS 'Server-authoritative check if exam time has expired.';
 COMMENT ON VIEW exam_timer_status IS 'Real-time view of exam timer status - clients should query this for timer updates.';
 COMMENT ON FUNCTION start_exam_with_server_timer(UUID, UUID, UUID, INTEGER) IS 'Initialize exam with server-controlled timing.';
+
+-- 8. Function to set session ends_at once (idempotent)
+CREATE OR REPLACE FUNCTION set_session_end_time_once(
+  p_session_id UUID,
+  p_duration_minutes INTEGER
+)
+RETURNS TIMESTAMPTZ AS $$
+DECLARE
+  v_ends TIMESTAMPTZ;
+BEGIN
+  SELECT ends_at INTO v_ends FROM exam_sessions WHERE id = p_session_id;
+  IF v_ends IS NULL THEN
+    UPDATE exam_sessions
+      SET ends_at = NOW() + make_interval(mins => p_duration_minutes)
+      WHERE id = p_session_id;
+  END IF;
+  RETURN (SELECT ends_at FROM exam_sessions WHERE id = p_session_id);
+END;
+$$ LANGUAGE plpgsql;

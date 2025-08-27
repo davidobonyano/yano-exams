@@ -17,6 +17,7 @@ import { VideoStream } from '@/components/ui/video-stream'
 import { Clock, AlertTriangle, Wifi, WifiOff, BookOpen, CheckCircle, Circle, ArrowLeft, ArrowRight, Send, Eye, EyeOff, Timer, Target, Zap, Camera, CameraOff, BarChart3, ChevronLeft, ChevronRight, RotateCcw, Flag, Mic } from 'lucide-react'
 import { useCheatingDetection } from '@/hooks/useCheatingDetection'
 import PersistentExamTimer from './PersistentExamTimer'
+import { useServerAnchoredTimer } from '@/hooks/useServerAnchoredTimer'
 import SessionQuestionDisplay from './SessionQuestionDisplay'
 import ExamInstructions from './ExamInstructions'
 import DemoExam from './DemoExam'
@@ -25,9 +26,30 @@ import DemoExam from './DemoExam'
 import SubmitConfirmationModal from './SubmitConfirmationModal'
 import StudentWarningDisplay from './StudentWarningDisplay'
 import { StudentWebRTC as OldStudentWebRTC } from '@/lib/webrtc'
+import { shuffleQuestionsForStudent } from '@/lib/question-shuffler'
 import { CameraFrameStreaming } from '@/lib/camera-streaming'
 import StudentWebRTC from './StudentWebRTC'
 import toast from 'react-hot-toast'
+function ServerAnchoredTimerUI({ attemptId, onTimeUp }: { attemptId: string; onTimeUp: () => void }) {
+  const { remainingSeconds, serverSynced } = useServerAnchoredTimer({ attemptId, onTimeUp })
+
+  const format = (seconds: number) => {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    const s = seconds % 60
+    return h > 0 ? `${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` : `${m}:${s.toString().padStart(2,'0')}`
+  }
+
+  return (
+    <div className="text-center p-4 border rounded-lg bg-red-50">
+      <Timer className="w-4 h-4 mx-auto text-red-500 mb-1" />
+      <div className="text-lg font-semibold text-red-700">
+        {remainingSeconds === null ? (serverSynced ? '—' : 'Syncing…') : format(remainingSeconds)}
+      </div>
+      <div className="text-xs text-red-600">Server-anchored</div>
+    </div>
+  )
+}
 
 interface SessionExamInterfaceProps {
   examId?: string // Make optional since we'll get it from context
@@ -62,7 +84,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
   const [webrtcConnection, setWebrtcConnection] = useState<OldStudentWebRTC | null>(null)
 
   const [frameStreaming, setFrameStreaming] = useState<CameraFrameStreaming | null>(null)
-  const [showSubmitModal, setShowSubmitModal] = useState(false)
+  const [step, setStep] = useState<'none' | 'confirm' | 'submitting' | 'success'>('none')
   const [examCompleted, setExamCompleted] = useState(false)
   const [examInitialized, setExamInitialized] = useState(false)
   const [cameraAccessDisabled, setCameraAccessDisabled] = useState(false)
@@ -112,6 +134,27 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     setCameraStream(stream)
     cameraPromptShown.current = false
     
+    // Start snapshot streaming every 3s (fallback to frames)
+    try {
+      if (session && session.session && session.student) {
+        const videoEl = document.createElement('video')
+        videoEl.autoplay = true
+        videoEl.muted = true
+        videoEl.playsInline = true
+        videoEl.srcObject = stream
+        // Keep offscreen; no DOM append required
+        await videoEl.play().catch(() => {})
+
+        const streamer = new CameraFrameStreaming(session.session.id, session.student.id, videoEl)
+        streamer.startStreaming()
+        setFrameStreaming(streamer)
+        frameStreamingRef.current = streamer
+        console.log('📸 Snapshot streaming started')
+      }
+    } catch (e) {
+      console.warn('Could not start snapshot streaming:', e)
+    }
+
     // Update camera status in database for teacher monitoring
     if (session) {
       try {
@@ -190,6 +233,40 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       if (session) {
         initializeExam()
       }
+    }
+  }
+
+  const forceKillAllMedia = async () => {
+    try {
+      // Stop local camera stream
+      if (cameraStreamRef.current) {
+        cameraStreamRef.current.getTracks().forEach(track => track.stop())
+        setCameraStream(null)
+      }
+
+      // Destroy any video elements' streams
+      const videos = document.querySelectorAll('video')
+      videos.forEach(v => {
+        const video = v as HTMLVideoElement
+        try { video.pause() } catch {}
+        if (video.srcObject) {
+          const stream = video.srcObject as MediaStream
+          stream.getTracks().forEach(t => t.stop())
+          video.srcObject = null
+        }
+        video.removeAttribute('src')
+        try { video.load() } catch {}
+      })
+
+      // Persist camera status
+      if (attempt?.id) {
+        await supabase
+          .from('student_exam_attempts')
+          .update({ camera_enabled: false, last_activity_at: new Date().toISOString() })
+          .eq('id', attempt.id)
+      }
+    } catch (e) {
+      console.warn('Force media kill error:', e)
     }
   }
 
@@ -292,6 +369,37 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     frameStreamingRef.current = frameStreaming
   }, [frameStreaming])
 
+  // Auto re-initialize camera on reload when exam is in progress
+  useEffect(() => {
+    const shouldAutoStartCamera =
+      !!session &&
+      !!attempt &&
+      attempt.status === 'in_progress' &&
+      !cameraStream &&
+      !examCompleted &&
+      !cameraAccessDisabled
+    
+    if (!shouldAutoStartCamera) return
+    
+    let cancelled = false
+    ;(async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 24 } },
+          audio: false,
+        })
+        if (cancelled) return
+        await handleCameraGranted(stream)
+      } catch (e) {
+        console.warn('Auto camera init failed:', e)
+      }
+    })()
+    
+    return () => {
+      cancelled = true
+    }
+  }, [session, attempt, cameraStream, examCompleted, cameraAccessDisabled])
+
   // Load upcoming exams when session is available
   useEffect(() => {
     if (session?.student?.class_level && showInstructions) {
@@ -324,11 +432,11 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       
       // WebRTC cleanup handled by StudentWebRTC component
       
-      // Cleanup frame streaming - DISABLED for WebRTC
-      // if (frameStreamingRef.current) {
-      //   console.log('Unmount: Stopping frame streaming')
-      //   frameStreamingRef.current.stopStreaming()
-      // }
+      // Cleanup frame streaming
+      if (frameStreamingRef.current) {
+        console.log('Unmount: Stopping frame streaming')
+        frameStreamingRef.current.stopStreaming()
+      }
     }
   }, []) // No dependencies - only run on mount/unmount
 
@@ -378,7 +486,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         setShowInstructions(false)
       }
 
-      // Fetch questions
+      // Fetch questions and deterministically shuffle per student once
       console.log('Fetching questions for exam ID:', examId)
       const { data: questionsData, error: questionsError } = await supabase
         .from('questions')
@@ -400,13 +508,13 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
       console.log(`Loaded ${questionsData.length} questions for exam`)
 
-      // Randomize question order for anti-cheating
-      const shuffledQuestions = [...questionsData].sort(() => Math.random() - 0.5)
-      setQuestions(shuffledQuestions)
+      // Deterministic shuffle: consistent per (student, exam), stable across reloads
+      const shuffled = shuffleQuestionsForStudent(questionsData as any, session.student.id, examId)
+      setQuestions(shuffled as any)
       
       // Create questions map for fast lookup
       const qMap: Record<string, Question> = {}
-      shuffledQuestions.forEach(question => {
+      questionsData.forEach((question: Question) => {
         qMap[question.id] = question
       })
       setQuestionsMap(qMap)
@@ -427,6 +535,12 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
           answersMap[answer.question_id] = answer.answer
         })
         setAnswers(answersMap)
+
+        // Restore current question index if available
+        if (typeof attemptData.current_index === 'number' && !isNaN(attemptData.current_index)) {
+          const safeIndex = Math.min(Math.max(0, attemptData.current_index), (questionsData?.length || 1) - 1)
+          setCurrentQuestionIndex(safeIndex)
+        }
       }
 
     } catch (err: unknown) {
@@ -447,7 +561,29 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       console.log('Student ID:', session.student.id)
       console.log('Exam ID:', session.exam.id)
 
-      // Use upsert to handle existing attempts
+      // 1) Persist end_time in exam_sessions once (server time anchor)
+      const { data: sessionRow, error: sessionFetchErr } = await supabase
+        .from('exam_sessions')
+        .select('ends_at')
+        .eq('id', session.session.id)
+        .single()
+
+      if (sessionFetchErr) throw sessionFetchErr
+
+      if (!sessionRow?.ends_at) {
+        // If no ends_at (should exist from creation), set it now from server now() + duration
+        const { data: endsAtRow, error: endsErr } = await supabase
+          .rpc('set_session_end_time_once', {
+            p_session_id: session.session.id,
+            p_duration_minutes: session.exam.duration_minutes
+          })
+        if (endsErr) throw endsErr
+        console.log('Server set session end_time:', endsAtRow)
+      }
+
+      // 2) Create/Upsert attempt (no question_order management)
+
+      // 3) Create attempt
       const { data, error } = await supabase
         .from('student_exam_attempts')
         .upsert([{
@@ -456,7 +592,6 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
           exam_id: session.exam.id,
           status: 'in_progress',
           started_at: new Date().toISOString(),
-          time_remaining: session.exam.duration_minutes * 60,
           camera_enabled: !!cameraStream // Set camera status based on current stream
         }], {
           onConflict: 'session_id,student_id,exam_id'
@@ -638,27 +773,14 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       }
       
       // Cleanup frame streaming
-      // OLD: Frame streaming cleanup - DISABLED for WebRTC
-      // if (frameStreaming) {
-      //   console.log('Stopping frame streaming')
-      //   frameStreaming.stopStreaming()
-      //   setFrameStreaming(null)
-      // }
-      
-      // Update camera status in database
-      if (attempt?.id) {
-        console.log('Updating camera status to disabled in database for attempt:', attempt.id)
-        const { error: cameraUpdateError } = await supabase
-          .from('student_exam_attempts')
-          .update({ camera_enabled: false })
-          .eq('id', attempt.id)
-          
-        if (cameraUpdateError) {
-          console.error('Failed to update camera status:', cameraUpdateError)
-        }
-      } else {
-        console.warn('Cannot update camera status - no valid attempt ID')
+      if (frameStreaming) {
+        console.log('Stopping frame streaming')
+        frameStreaming.stopStreaming()
+        setFrameStreaming(null)
       }
+      
+      // Camera is locally shut down above by stopping all tracks and closing peer connections.
+      // Removed Supabase-based camera status shutdown to avoid reliance on backend signals.
 
       // Update attempt status
       if (!attempt?.id) {
@@ -713,20 +835,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         setCameraStream(null)
       }
       
-      // After showing success state, redirect after delay
-      setTimeout(() => {
-        const showResults = session?.session?.show_results_after_submit || false
-        console.log('Show results after submit:', showResults)
-        console.log('Session data:', session)
-        
-        if (showResults) {
-          // Redirect to results page if enabled
-          router.push(`/results/${attempt.id}`)
-        } else {
-          // Redirect to dashboard with success message if disabled
-          router.push('/dashboard?examSubmitted=true')
-        }
-      }, 3000) // 3 second delay to show success state
+      // Navigation handled by caller to better control modal lifecycle
     } catch (err: unknown) {
       console.error('Error submitting exam:', err)
       setError(err instanceof Error ? err.message : 'Failed to submit exam')
@@ -734,22 +843,51 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     }
   }
 
-  const handleSubmitClick = () => {
-    setShowSubmitModal(true)
-  }
+  const handleSubmitClick = useCallback(() => {
+    if (step === 'submitting' || step === 'success') return
+    setStep('confirm')
+  }, [step])
 
-  const handleSubmitConfirm = async () => {
+  const handleSubmitConfirm = useCallback(async () => {
+    if (step === 'submitting' || step === 'success') return
+    setStep('submitting')
+    await forceKillAllMedia()
     await submitExam()
-    setShowSubmitModal(false)
-  }
+    setStep('success')
+    setTimeout(() => {
+      forceKillAllMedia()
+      setStep('none')
+      const showResults = session?.session?.show_results_after_submit || false
+      if (showResults) {
+        router.push(`/results/${attempt!.id}`)
+      } else {
+        router.push('/dashboard?examSubmitted=true')
+      }
+    }, 1500)
+  }, [step, submitExam, router, session, attempt])
 
-  const handleSubmitCancel = () => {
-    setShowSubmitModal(false)
-  }
+  const handleSubmitCancel = useCallback(() => {
+    if (step === 'submitting') return
+    setStep('none')
+  }, [step])
 
   const handleTimeUp = useCallback(async () => {
+    if (step === 'submitting' || step === 'success') return
+    setStep('submitting')
+    await forceKillAllMedia()
     await submitExam()
-  }, [attempt, session])
+    setStep('success')
+    setTimeout(() => {
+      forceKillAllMedia()
+      setStep('none')
+      const showResults = session?.session?.show_results_after_submit || false
+      if (showResults) {
+        router.push(`/results/${attempt!.id}`)
+      } else {
+        router.push('/dashboard?examSubmitted=true')
+      }
+    }, 1500)
+  }, [attempt, session, step, router])
 
   // Cleanup WebRTC connection and save timeout on component unmount
   useEffect(() => {
@@ -1155,70 +1293,22 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
             {/* Timer and Camera Status */}
             <div className="flex items-center space-x-4">
-              {/* Camera & Audio Indicator + WebRTC */}
+              {/* Camera Indicator (WebRTC disabled) */}
               {cameraStream && (
                 <div className="text-center p-4 border rounded-lg bg-green-50">
                   <div className="flex items-center justify-center space-x-2 mb-1">
                     <Camera className="w-4 h-4 text-green-500" />
-                    <Mic className="w-4 h-4 text-green-500" />
                   </div>
                   <div className="flex items-center justify-center space-x-1">
                     <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                    <span className="text-xs font-medium text-green-700">Camera & Audio On</span>
+                    <span className="text-xs font-medium text-green-700">Camera On</span>
                   </div>
                 </div>
               )}
               
-              {/* WebRTC Component for live streaming */}
-              {session?.session?.camera_monitoring_enabled && examStarted && session.student?.id && !webrtcInitialized && (
-                <div className="text-center p-4 border rounded-lg bg-blue-50">
-                  <StudentWebRTC 
-                    studentId={session.student.id} 
-                    onStreamReady={(stream) => {
-                      setCameraStream(stream)
-                      setWebrtcInitialized(true)
-                      console.log('📹 WebRTC stream ready - updating camera indicator')
-                    }}
-                    onCleanupRef={(cleanupFn) => {
-                      webrtcCleanupRef.current = cleanupFn
-                    }}
-                    onStreamStopped={() => {
-                      setCameraStream(null)
-                      console.log('📹 Camera stream stopped - clearing indicator')
-                    }}
-                  />
-                </div>
-              )}
+              {/* WebRTC live streaming disabled */}
               
-              {webrtcInitialized && (
-                <div className="text-center p-4 border rounded-lg bg-green-50">
-                  <div className="text-sm text-green-600">
-                    WebRTC streaming active ✅
-                  </div>
-                </div>
-              )}
-              
-              <div className="text-center p-4 border rounded-lg bg-red-50">
-                <Timer className="w-4 h-4 mx-auto text-red-500 mb-1" />
-                <PersistentExamTimer
-                  attemptId={attempt.id}
-                  initialTimeRemaining={(() => {
-                    const fallbackTime = session.exam.duration_minutes * 60
-                    const attemptTime = attempt.time_remaining || 0
-                    
-                    // If attempt time is suspiciously low (less than 30 seconds), use full exam duration
-                    const timeRemaining = attemptTime < 30 ? fallbackTime : attemptTime
-                    
-                    console.log('🕒 Timer initialized with:', timeRemaining, 'seconds')
-                    console.log('🕒 Attempt time_remaining:', attempt.time_remaining)
-                    console.log('🕒 Exam duration_minutes:', session.exam.duration_minutes)
-                    console.log('🕒 Used fallback time?', attemptTime < 30)
-                    
-                    return timeRemaining
-                  })()}
-                  onTimeUp={handleTimeUp}
-                />
-              </div>
+              <ServerAnchoredTimerUI attemptId={attempt.id} onTimeUp={handleTimeUp} />
             </div>
           </div>
 
@@ -1305,9 +1395,12 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                       >
                         <Button
                           onClick={() => {
-                            const newIndex = Math.max(0, currentQuestionIndex - 1)
-                            setCurrentQuestionIndex(newIndex)
-                            setVisitedQuestions(prev => new Set(prev).add(newIndex))
+                                                          const newIndex = Math.max(0, currentQuestionIndex - 1)
+                              setCurrentQuestionIndex(newIndex)
+                              setVisitedQuestions(prev => new Set(prev).add(newIndex))
+                              if (attempt?.id) {
+                                supabase.from('student_exam_attempts').update({ current_index: newIndex }).eq('id', attempt.id)
+                              }
                           }}
                           disabled={currentQuestionIndex === 0}
                           variant="outline"
@@ -1340,6 +1433,9 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                               const newIndex = Math.min(questions.length - 1, currentQuestionIndex + 1)
                               setCurrentQuestionIndex(newIndex)
                               setVisitedQuestions(prev => new Set(prev).add(newIndex))
+                              if (attempt?.id) {
+                                supabase.from('student_exam_attempts').update({ current_index: newIndex }).eq('id', attempt.id)
+                              }
                             }}
                             size="lg"
                           >
@@ -1395,6 +1491,9 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                           onClick={() => {
                             setCurrentQuestionIndex(index)
                             setVisitedQuestions(prev => new Set(prev).add(index))
+                            if (attempt?.id) {
+                              supabase.from('student_exam_attempts').update({ current_index: index }).eq('id', attempt.id)
+                            }
                           }}
                           className={`w-10 h-10 text-xs font-medium rounded-xl transition-all duration-300 ${
                             index === currentQuestionIndex
@@ -1466,6 +1565,9 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                     if (unanswered !== -1) {
                     setCurrentQuestionIndex(unanswered)
                     setVisitedQuestions(prev => new Set(prev).add(unanswered))
+                    if (attempt?.id) {
+                      supabase.from('student_exam_attempts').update({ current_index: unanswered }).eq('id', attempt.id)
+                    }
                     }
                     }}
                     className="text-xs flex items-center gap-1"
@@ -1480,6 +1582,9 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                     onClick={() => {
                     setCurrentQuestionIndex(questions.length - 1)
                       setVisitedQuestions(prev => new Set(prev).add(questions.length - 1))
+                      if (attempt?.id) {
+                        supabase.from('student_exam_attempts').update({ current_index: questions.length - 1 }).eq('id', attempt.id)
+                      }
                     }}
                       className="text-xs flex items-center gap-1"
                     >
@@ -1498,7 +1603,8 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
       {/* Submit Confirmation Modal */}
       <SubmitConfirmationModal
-        isOpen={showSubmitModal}
+        isOpen={step !== 'none'}
+        step={step === 'confirm' ? 'confirm' : step === 'submitting' ? 'submitting' : step === 'success' ? 'success' : 'confirm'}
         onClose={handleSubmitCancel}
         onConfirm={handleSubmitConfirm}
         questionsAnswered={Object.keys(answers).length}

@@ -50,6 +50,7 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
   const [loading, setLoading] = useState(true)
   const [selectedStudent, setSelectedStudent] = useState<string | null>(null)
   const [soundEnabled, setSoundEnabled] = useState(false)
+  const [viewMode, setViewMode] = useState<'snapshots' | 'webrtc'>('snapshots')
   const [warningStudent, setWarningStudent] = useState<string | null>(null)
   const webrtcRef = useRef<TeacherWebRTC | null>(null)
   const webrtcStreamingRef = useRef<TeacherWebRTCNew | null>(null)
@@ -96,9 +97,19 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
 
   useEffect(() => {
     fetchStudentFeeds()
-    // OLD WebRTC disabled - using simple per-student channels now
+    // Initialize both systems; UI toggle will decide what to show
     // initializeWebRTC()
-    // setupWebRTCStreaming()
+    setupWebRTCStreaming()
+    const frameReceiver = new CameraFrameReceiver(session.id)
+    frameReceiver.startReceiving((studentId, frameData) => {
+      console.log('📸 Teacher received frame from student:', studentId)
+      setStudentFrames(prev => {
+        const next = new Map(prev)
+        next.set(studentId, frameData)
+        return next
+      })
+    })
+    frameReceiverRef.current = frameReceiver
     
     // Set up real-time subscription for camera status updates
     const subscription = supabase
@@ -134,10 +145,9 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
       if (webrtcStreamingRef.current) {
         webrtcStreamingRef.current.destroy()
       }
-      // OLD: Frame receiver cleanup - DISABLED for WebRTC
-      // if (frameReceiverRef.current) {
-      //   frameReceiverRef.current.stopReceiving()
-      // }
+      if (frameReceiverRef.current) {
+        frameReceiverRef.current.stopReceiving()
+      }
     }
   }, [session.id])
 
@@ -336,6 +346,16 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                       )}
                       {soundEnabled ? 'Sound On' : 'Sound Off'}
                     </MagneticButton>
+                    <div className="flex items-center gap-2 ml-2">
+                      <button
+                        onClick={() => setViewMode('snapshots')}
+                        className={`px-3 py-2 rounded-md text-sm border ${viewMode === 'snapshots' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300'}`}
+                      >Snapshots</button>
+                      <button
+                        onClick={() => setViewMode('webrtc')}
+                        className={`px-3 py-2 rounded-md text-sm border ${viewMode === 'webrtc' ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300'}`}
+                      >Live (WebRTC)</button>
+                    </div>
                   </div>
                 </div>
               </CardHeader>
@@ -360,7 +380,7 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                           <div>
                             <p className="text-sm font-medium text-green-700">Cameras On</p>
                             <p className="text-2xl font-bold text-green-900">
-                              {students.filter(s => s.camera_enabled).length}
+                              {viewMode === 'webrtc' ? students.filter(s => !!s.stream).length : students.filter(s => !!studentFrames.get(s.student_id)).length}
                             </p>
                           </div>
                           <Camera className="w-8 h-8 text-green-600" />
@@ -392,12 +412,34 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                           onClick={() => toggleFullscreen(student.id)}
                         >
                         <div className="relative">
-                          <div className="w-full h-32 bg-gray-100 rounded-lg flex items-center justify-center">
-                            <div className="text-center">
-                              <Camera className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-                              <p className="text-xs text-gray-500">Click to view live stream</p>
-                            </div>
-                          </div>
+                          {viewMode === 'webrtc' ? (
+                            student.stream ? (
+                              <TeacherVideoDisplay
+                                stream={student.stream}
+                                studentId={student.student_id}
+                                className="w-full h-48 object-cover"
+                                soundEnabled={soundEnabled}
+                              />
+                            ) : (
+                              <div className="w-full h-48 bg-gray-100 rounded-lg flex items-center justify-center">
+                                <div className="text-center">
+                                  <Camera className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+                                  <p className="text-xs text-gray-500">Waiting for live video…</p>
+                                </div>
+                              </div>
+                            )
+                          ) : (
+                            studentFrames.get(student.student_id) ? (
+                              <img src={studentFrames.get(student.student_id)} alt={`${student.full_name} frame`} className="w-full h-48 object-cover rounded-lg" />
+                            ) : (
+                              <div className="w-full h-48 bg-gray-100 rounded-lg flex items-center justify-center">
+                                <div className="text-center">
+                                  <Camera className="w-8 h-8 mx-auto text-gray-400 mb-2" />
+                                  <p className="text-xs text-gray-500">Waiting for snapshot…</p>
+                                </div>
+                              </div>
+                            )
+                          )}
                           
                           {/* Warning Button */}
                           <button
@@ -425,11 +467,11 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                             <p className="text-xs text-gray-500">ID: {student.student_id}</p>
                             <div className="flex items-center justify-between mt-2">
                               <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                              student.camera_enabled || student.stream
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-gray-100 text-gray-800'
+                              viewMode === 'webrtc'
+                                ? (student.stream ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800')
+                                : (studentFrames.get(student.student_id) ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800')
                               }`}>
-                              {student.camera_enabled || student.stream ? 'Camera On' : 'Camera Off'}
+                              {viewMode === 'webrtc' ? (student.stream ? 'Camera On' : 'Camera Off') : (studentFrames.get(student.student_id) ? 'Camera On' : 'Camera Off')}
                               </span>
                               <Eye className="w-4 h-4 text-gray-400" />
                             </div>

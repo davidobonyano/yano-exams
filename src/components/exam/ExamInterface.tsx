@@ -13,6 +13,7 @@ import DemoExam from './DemoExam'
 import StudentWarningDisplay from './StudentWarningDisplay'
 import SubmitConfirmationModal from './SubmitConfirmationModal'
 import { calculateAndSaveScore, validateAndMarkAnswers } from '@/lib/auto-scoring'
+import { shuffleQuestionsForStudent } from '@/lib/question-shuffler'
 
 interface ExamInterfaceProps {
   examId: string
@@ -37,9 +38,8 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
   const [loadingUpcoming, setLoadingUpcoming] = useState(true)
   const [examStarted, setExamStarted] = useState(false)
   
-  // New submission flow states
-  const [showSubmitModal, setShowSubmitModal] = useState(false)
-  const [submissionState, setSubmissionState] = useState<'idle' | 'confirming' | 'submitting' | 'submitted'>('idle')
+  // Step-based modal flow
+  const [step, setStep] = useState<'none' | 'confirm' | 'submitting' | 'success'>('none')
 
   const warningShown = useRef(false)
   const tabSwitchCount = useRef(0)
@@ -215,9 +215,9 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
 
       if (questionsError) throw questionsError
 
-      // Randomize question order for anti-cheating
-      const shuffledQuestions = [...questionsData].sort(() => Math.random() - 0.5)
-      setQuestions(shuffledQuestions)
+      // Deterministic shuffle per student, stable across reloads
+      const shuffledQuestions = shuffleQuestionsForStudent(questionsData as any, profile!.id, examId)
+      setQuestions(shuffledQuestions as any)
 
       // Load existing answers if resuming
       if (attemptData && attemptData.status === 'in_progress') {
@@ -358,8 +358,6 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
     if (!attempt || !exam) return
 
     try {
-      setSubmissionState('submitting')
-
       // Update attempt status
       const { error: updateError } = await supabase
         .from('user_exam_attempts')
@@ -392,41 +390,44 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
         console.error('Failed to calculate exam score:', scoringResult.error)
       }
 
-      // Set submitted state
-      setSubmissionState('submitted')
-      
-      // For standalone exams, show results after submission
-      // Wait a moment to show the submitted state, then redirect to results
-      setTimeout(() => {
-        router.push(`/results/${attempt.id}`)
-      }, 2000)
+      // Do not redirect here; handler manages success step and navigation
     } catch (err: unknown) {
       console.error('Error submitting exam:', err)
       setError(err instanceof Error ? err.message : 'Failed to submit exam')
-      setSubmissionState('idle')
     }
   }
 
   const handleTimeUp = useCallback(async () => {
-    // Auto-submit when time is up
-    setSubmissionState('submitting')
+    if (step === 'submitting' || step === 'success') return
+    setStep('submitting')
     await submitExam()
-  }, [attempt, exam])
+    setStep('success')
+    setTimeout(() => {
+      setStep('none')
+      router.push('/dashboard')
+    }, 1500)
+  }, [attempt, exam, step, router])
 
-  const handleSubmitClick = () => {
-    setSubmissionState('confirming')
-    setShowSubmitModal(true)
-  }
+  const handleSubmitClick = useCallback(() => {
+    if (step === 'submitting' || step === 'success') return
+    setStep('confirm')
+  }, [step])
 
-  const handleSubmitConfirm = async () => {
-    setShowSubmitModal(false)
+  const handleSubmitConfirm = useCallback(async () => {
+    if (step === 'submitting' || step === 'success') return
+    setStep('submitting')
     await submitExam()
-  }
+    setStep('success')
+    setTimeout(() => {
+      setStep('none')
+      router.push('/dashboard')
+    }, 1500)
+  }, [step, router, submitExam])
 
-  const handleSubmitCancel = () => {
-    setShowSubmitModal(false)
-    setSubmissionState('idle')
-  }
+  const handleSubmitCancel = useCallback(() => {
+    if (step === 'submitting') return
+    setStep('none')
+  }, [step])
 
   if (loading) {
     return (
@@ -530,7 +531,7 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
       )}
 
       {/* Submission Status */}
-      {submissionState === 'submitting' && (
+      {step === 'submitting' && (
         <div className="bg-blue-500 text-white text-center py-3">
           <div className="flex items-center justify-center gap-2">
             <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>
@@ -539,7 +540,7 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
         </div>
       )}
 
-      {submissionState === 'submitted' && (
+      {step === 'success' && (
         <div className="bg-green-500 text-white text-center py-3">
           <div className="flex items-center justify-center gap-2">
             <CheckCircle className="w-5 h-5" />
@@ -594,11 +595,10 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
             {currentQuestionIndex === questions.length - 1 ? (
               <button
                 onClick={handleSubmitClick}
-                disabled={submissionState === 'submitting' || submissionState === 'submitted'}
+                disabled={step === 'submitting' || step === 'success'}
                 className="px-6 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {submissionState === 'submitting' ? 'Submitting...' : 
-                 submissionState === 'submitted' ? 'Submitted!' : 'Submit Exam'}
+                {step === 'submitting' ? 'Submitting...' : step === 'success' ? 'Submitted!' : 'Submit Exam'}
               </button>
             ) : (
               <button
@@ -636,7 +636,8 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
 
       {/* Submit Confirmation Modal */}
       <SubmitConfirmationModal
-        isOpen={showSubmitModal}
+        isOpen={step !== 'none'}
+        step={step === 'confirm' ? 'confirm' : step === 'submitting' ? 'submitting' : step === 'success' ? 'success' : 'confirm'}
         onClose={handleSubmitCancel}
         onConfirm={handleSubmitConfirm}
         questionsAnswered={Object.keys(answers).length}

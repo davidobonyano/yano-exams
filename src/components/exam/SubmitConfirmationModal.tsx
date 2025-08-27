@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MagneticButton } from '@/components/ui/magnetic-button'
@@ -8,6 +8,7 @@ import { Send, X, CheckCircle, AlertTriangle } from 'lucide-react'
 
 interface SubmitConfirmationModalProps {
   isOpen: boolean
+  step: 'confirm' | 'submitting' | 'success'
   onClose: () => void
   onConfirm: () => Promise<void>
   questionsAnswered: number
@@ -17,22 +18,20 @@ interface SubmitConfirmationModalProps {
 
 export default function SubmitConfirmationModal({
   isOpen,
+  step,
   onClose,
   onConfirm,
   questionsAnswered,
   totalQuestions,
   timeRemaining
 }: SubmitConfirmationModalProps) {
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const unansweredCount = totalQuestions - questionsAnswered
+  const isSubmitting = step === 'submitting'
+  const isSuccess = step === 'success'
+  const unansweredCount = useMemo(() => totalQuestions - questionsAnswered, [totalQuestions, questionsAnswered])
   
   const handleConfirm = async () => {
-    setIsSubmitting(true)
-    try {
-      await onConfirm()
-    } catch (error) {
-      setIsSubmitting(false)
-    }
+    if (isSubmitting || isSuccess) return
+    await onConfirm()
   }
 
 
@@ -69,7 +68,7 @@ export default function SubmitConfirmationModal({
                 <div className="h-2 bg-gradient-to-r from-green-500 via-emerald-500 to-cyan-500" />
                 
                 <CardHeader className="relative">
-                  {!isSubmitting && (
+                  {!isSubmitting && !isSuccess && (
                     <motion.button
                       whileHover={{ scale: 1.1, rotate: 90 }}
                       whileTap={{ scale: 0.9 }}
@@ -93,13 +92,15 @@ export default function SubmitConfirmationModal({
                           transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
                           className="w-6 h-6 border-2 border-white border-t-transparent rounded-full"
                         />
+                      ) : isSuccess ? (
+                        <CheckCircle className="w-8 h-8 text-white" />
                       ) : (
                         <Send className="w-8 h-8 text-white" />
                       )}
                     </motion.div>
                     
                     <CardTitle className="text-2xl font-bold">
-                      {isSubmitting ? 'Submitting Exam...' : 'Submit Exam?'}
+                      {isSubmitting ? 'Submitting Exam...' : isSuccess ? 'Submitted!' : 'Submit Exam?'}
                     </CardTitle>
                   </div>
                 </CardHeader>
@@ -126,6 +127,18 @@ export default function SubmitConfirmationModal({
                           🔒 Do not close this window or navigate away
                         </p>
                       </div>
+                    </motion.div>
+                  ) : isSuccess ? (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      className="text-center space-y-4"
+                    >
+                      <div className="text-green-600">
+                        <CheckCircle className="w-12 h-12 mx-auto mb-2" />
+                      </div>
+                      <p className="text-gray-700 text-lg">Exam submitted successfully!</p>
+                      <p className="text-sm text-gray-500">Redirecting to dashboard…</p>
                     </motion.div>
                   ) : (
                     <>

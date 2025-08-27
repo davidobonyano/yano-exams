@@ -96,6 +96,7 @@ export interface StudentExamAttempt {
   time_remaining?: number
   is_paused: boolean
   pause_reason?: string
+  current_index?: number
   created_at: string
 }
 
