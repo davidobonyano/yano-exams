@@ -111,6 +111,10 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     }
   })
 
+  // Step-scoped camera handling for confirmation flow
+  const confirmStepCameraStartedRef = useRef(false)
+  const confirmStepStreamRef = useRef<MediaStream | null>(null)
+
   // Camera access handlers
   const handleCameraGranted = async (stream: MediaStream) => {
     console.log('🎥 Camera granted, setting up...')
@@ -233,40 +237,6 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       if (session) {
         initializeExam()
       }
-    }
-  }
-
-  const forceKillAllMedia = async () => {
-    try {
-      // Stop local camera stream
-      if (cameraStreamRef.current) {
-        cameraStreamRef.current.getTracks().forEach(track => track.stop())
-        setCameraStream(null)
-      }
-
-      // Destroy any video elements' streams
-      const videos = document.querySelectorAll('video')
-      videos.forEach(v => {
-        const video = v as HTMLVideoElement
-        try { video.pause() } catch {}
-        if (video.srcObject) {
-          const stream = video.srcObject as MediaStream
-          stream.getTracks().forEach(t => t.stop())
-          video.srcObject = null
-        }
-        video.removeAttribute('src')
-        try { video.load() } catch {}
-      })
-
-      // Persist camera status
-      if (attempt?.id) {
-        await supabase
-          .from('student_exam_attempts')
-          .update({ camera_enabled: false, last_activity_at: new Date().toISOString() })
-          .eq('id', attempt.id)
-      }
-    } catch (e) {
-      console.warn('Force media kill error:', e)
     }
   }
 
@@ -848,13 +818,120 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     setStep('confirm')
   }, [step])
 
+  // Step-scoped camera handling for confirmation flow
+  useEffect(() => {
+    let cancelled = false
+    let confirmStream: MediaStream | null = null
+
+    const startConfirmCamera = async () => {
+      if (confirmStepCameraStartedRef.current) return
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+        if (cancelled) {
+          stream.getTracks().forEach(track => track.stop())
+          return
+        }
+        confirmStream = stream
+        confirmStepStreamRef.current = stream
+        confirmStepCameraStartedRef.current = true
+      } catch (e) {
+        console.warn('Confirm-step camera start failed:', e)
+      }
+    }
+
+    const stopConfirmCamera = () => {
+      // Stop the confirm step camera
+      if (confirmStepStreamRef.current) {
+        confirmStepStreamRef.current.getTracks().forEach(track => track.stop())
+        confirmStepStreamRef.current = null
+      }
+      // Also stop the local confirmStream reference
+      if (confirmStream) {
+        confirmStream.getTracks().forEach(track => track.stop())
+        confirmStream = null
+      }
+      confirmStepCameraStartedRef.current = false
+    }
+
+    if (step === 'confirm') {
+      startConfirmCamera()
+    } else {
+      stopConfirmCamera()
+    }
+
+    return () => {
+      cancelled = true
+      stopConfirmCamera()
+    }
+  }, [step])
+
+  const forceKillAllMedia = async () => {
+    try {
+      console.log('🔴 FORCE KILL: Starting comprehensive media cleanup...')
+
+      // Stop local camera stream
+      if (cameraStreamRef.current) {
+        console.log('🔴 FORCE KILL: Stopping main camera stream')
+        cameraStreamRef.current.getTracks().forEach(track => track.stop())
+        setCameraStream(null)
+      }
+
+      // Stop confirm step camera
+      if (confirmStepStreamRef.current) {
+        console.log('🔴 FORCE KILL: Stopping confirm step camera')
+        confirmStepStreamRef.current.getTracks().forEach(track => track.stop())
+        confirmStepStreamRef.current = null
+        confirmStepCameraStartedRef.current = false
+      }
+
+      // Destroy any video elements' streams
+      const videos = document.querySelectorAll('video')
+      videos.forEach(v => {
+        const video = v as HTMLVideoElement
+        try { video.pause() } catch {}
+        if (video.srcObject) {
+          console.log('🔴 FORCE KILL: Stopping video element stream')
+          const stream = video.srcObject as MediaStream
+          stream.getTracks().forEach(track => track.stop())
+          video.srcObject = null
+        }
+        video.removeAttribute('src')
+        try { video.load() } catch {}
+      })
+
+      // Force stop any remaining getUserMedia streams
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices()
+        const videoDevices = devices.filter(device => device.kind === 'videoinput')
+        console.log('🔴 FORCE KILL: Found video devices:', videoDevices.length)
+      } catch (e) {
+        console.warn('Device enumeration failed:', e)
+      }
+
+      // Persist camera status
+      if (attempt?.id) {
+        await supabase
+          .from('student_exam_attempts')
+          .update({ camera_enabled: false, last_activity_at: new Date().toISOString() })
+          .eq('id', attempt.id)
+      }
+
+      console.log('🔴 FORCE KILL: Media cleanup complete')
+    } catch (e) {
+      console.warn('Force media kill error:', e)
+    }
+  }
+
   const handleSubmitConfirm = useCallback(async () => {
     if (step === 'submitting' || step === 'success') return
+    console.log('🔴 SUBMIT: Starting submit flow, killing media first...')
     setStep('submitting')
     await forceKillAllMedia()
+    console.log('🔴 SUBMIT: Media killed, now submitting exam...')
     await submitExam()
     setStep('success')
     setTimeout(() => {
+      console.log('🔴 SUBMIT: Success timeout, killing media again...')
       forceKillAllMedia()
       setStep('none')
       const showResults = session?.session?.show_results_after_submit || false
@@ -873,11 +950,14 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
   const handleTimeUp = useCallback(async () => {
     if (step === 'submitting' || step === 'success') return
+    console.log('🔴 TIME UP: Starting time-up flow, killing media first...')
     setStep('submitting')
     await forceKillAllMedia()
+    console.log('🔴 TIME UP: Media killed, now submitting exam...')
     await submitExam()
     setStep('success')
     setTimeout(() => {
+      console.log('🔴 TIME UP: Success timeout, killing media again...')
       forceKillAllMedia()
       setStep('none')
       const showResults = session?.session?.show_results_after_submit || false

@@ -21,8 +21,8 @@ export class StudentWebRTC {
     this.sessionId = sessionId
     this.studentId = studentId
     
-    // Create peer connection with STUN servers for NAT traversal
-    this.peerConnection = new RTCPeerConnection(getRtcConfiguration())
+    // Create peer connection with default config (WebRTC disabled in app paths)
+    this.peerConnection = new RTCPeerConnection({ iceServers: [] })
 
     // WebRTC disabled
   }
@@ -215,7 +215,7 @@ export class TeacherWebRTCNew {
       console.log('📩 Teacher received offer from student:', studentId)
       
       // Create new peer connection for this student
-      const peerConnection = new RTCPeerConnection(getRtcConfiguration())
+      const peerConnection = new RTCPeerConnection({ iceServers: [] })
 
       // Handle incoming stream
       peerConnection.ontrack = (event) => {

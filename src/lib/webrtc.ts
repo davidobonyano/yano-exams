@@ -14,7 +14,7 @@ export interface WebRTCOffer {
 }
 
 export class StudentWebRTC {
-  private peerConnection: RTCPeerConnection
+  private peerConnection?: RTCPeerConnection
   private localStream: MediaStream | null = null
   private sessionId: string
   private studentId: string
@@ -33,6 +33,7 @@ export class StudentWebRTC {
 
   private setupPeerConnection() {
     // Handle ICE candidates
+    if (!this.peerConnection) return
     this.peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         this.sendIceCandidate(event.candidate)
@@ -41,7 +42,7 @@ export class StudentWebRTC {
 
     // Handle connection state changes
     this.peerConnection.onconnectionstatechange = () => {
-      console.log('Connection state:', this.peerConnection.connectionState)
+      console.log('Connection state:', this.peerConnection?.connectionState)
     }
   }
 
@@ -66,7 +67,7 @@ export class StudentWebRTC {
     if (this.localStream) {
       this.localStream.getTracks().forEach(track => track.stop())
     }
-    // if (this.peerConnection) this.peerConnection.close()
+    if (this.peerConnection) this.peerConnection.close()
   }
 }
 

@@ -43,6 +43,7 @@ export default function SimpleExamInterface({ sessionData, onExamComplete }: Sim
   const [error, setError] = useState('')
   const [examStarted, setExamStarted] = useState(false)
   const [showSubmitModal, setShowSubmitModal] = useState(false)
+  const [step, setStep] = useState<'none' | 'confirm' | 'submitting' | 'success'>('none')
   const [visitedQuestions, setVisitedQuestions] = useState<Set<number>>(new Set([0]))
 
   useEffect(() => {
@@ -282,15 +283,22 @@ export default function SimpleExamInterface({ sessionData, onExamComplete }: Sim
 
   const handleSubmitClick = () => {
     setShowSubmitModal(true)
+    setStep('confirm')
   }
 
   const handleSubmitConfirm = async () => {
+    setStep('submitting')
     await submitExam()
     setShowSubmitModal(false)
+    setStep('success')
+    setTimeout(() => {
+      setStep('none')
+    }, 1500)
   }
 
   const handleSubmitCancel = () => {
     setShowSubmitModal(false)
+    if (step !== 'submitting') setStep('none')
   }
 
   if (loading) {
@@ -605,6 +613,7 @@ export default function SimpleExamInterface({ sessionData, onExamComplete }: Sim
       {/* Submit Confirmation Modal */}
       <SubmitConfirmationModal
         isOpen={showSubmitModal}
+        step={step === 'confirm' ? 'confirm' : step === 'submitting' ? 'submitting' : step === 'success' ? 'success' : 'confirm'}
         onClose={handleSubmitCancel}
         onConfirm={handleSubmitConfirm}
         questionsAnswered={Object.keys(answers).length}
