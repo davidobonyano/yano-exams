@@ -341,13 +341,16 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
   // Auto re-initialize camera on reload when exam is in progress
   useEffect(() => {
+    const requiresCamera = session?.session?.camera_monitoring_enabled === true
+
     const shouldAutoStartCamera =
       !!session &&
       !!attempt &&
       attempt.status === 'in_progress' &&
       !cameraStream &&
       !examCompleted &&
-      !cameraAccessDisabled
+      !cameraAccessDisabled &&
+      requiresCamera
     
     if (!shouldAutoStartCamera) return
     
@@ -685,72 +688,8 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     try {
       console.log('Exam submission started - cleaning up camera...')
       
-      // NUCLEAR OPTION: Stop ALL camera/audio immediately
-      console.log('🚫 SUBMIT: NUCLEAR CAMERA/AUDIO SHUTDOWN')
-      
-      // 1. Stop WebRTC component first
-      if (webrtcCleanupRef.current) {
-        console.log('🔴 SUBMIT: WebRTC cleanup')
-        webrtcCleanupRef.current()
-        webrtcCleanupRef.current = null
-        setWebrtcInitialized(false)
-      }
-      
-      // 2. Force stop camera stream state
-      if (cameraStream) {
-        console.log('🔴 SUBMIT: Force stopping camera state')
-        cameraStream.getTracks().forEach(track => {
-          track.stop()
-          console.log('🛑 SUBMIT: Stopped track:', track.kind)
-        })
-        setCameraStream(null)
-      }
-      
-      // 3. SUPER NUCLEAR: Force stop ALL video elements and kill streams
-      try {
-        console.log('💥 SUPER NUCLEAR: Killing all video elements')
-        
-        // Find and kill ALL video elements on the page
-        const videos = document.querySelectorAll('video')
-        videos.forEach((video, index) => {
-          console.log(`🔴 Found video element ${index}:`, video.src || 'stream')
-          if (video.srcObject) {
-            const stream = video.srcObject as MediaStream
-            stream.getTracks().forEach(track => {
-              track.stop()
-              console.log('💥 KILLED video element track:', track.kind)
-            })
-            video.srcObject = null
-          }
-          video.src = ''
-          video.load()
-        })
-        
-        console.log('💥 SUPER NUCLEAR: All video elements destroyed')
-      } catch (error) {
-        console.log('💥 SUPER NUCLEAR: Error during video destruction:', error)
-      }
-      
-      // Cleanup WebRTC connection
-      if (webrtcConnection) {
-        console.log('Cleaning up WebRTC connection')
-        try {
-          webrtcConnection.destroy()
-        } catch (webrtcError) {
-          console.log('WebRTC cleanup error (non-critical):', webrtcError)
-        }
-        setWebrtcConnection(null)
-      }
-      
-      // Cleanup frame streaming
-      if (frameStreaming) {
-        console.log('Stopping frame streaming')
-        frameStreaming.stopStreaming()
-        setFrameStreaming(null)
-      }
-      
-      // Camera is locally shut down above by stopping all tracks and closing peer connections.
-      // Removed Supabase-based camera status shutdown to avoid reliance on backend signals.
+      // Use the comprehensive cleanup function
+      await forceKillAllMedia()
 
       // Update attempt status
       if (!attempt?.id) {
@@ -799,12 +738,6 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       setExamInitialized(false) // Reset initialization flag
       setCameraAccessDisabled(true) // Permanently disable camera access
       
-      // Stop camera stream after submission
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => track.stop())
-        setCameraStream(null)
-      }
-      
       // Navigation handled by caller to better control modal lifecycle
     } catch (err: unknown) {
       console.error('Error submitting exam:', err)
@@ -825,6 +758,9 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
     const startConfirmCamera = async () => {
       if (confirmStepCameraStartedRef.current) return
+      // Only start confirm-step camera if camera monitoring is enabled for this session
+      const requiresCamera = session?.session?.camera_monitoring_enabled === true
+      if (!requiresCamera) return
       try {
         const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false })
         if (cancelled) {
@@ -872,40 +808,69 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       // Stop local camera stream
       if (cameraStreamRef.current) {
         console.log('🔴 FORCE KILL: Stopping main camera stream')
-        cameraStreamRef.current.getTracks().forEach(track => track.stop())
+        cameraStreamRef.current.getTracks().forEach(track => {
+          track.stop()
+          console.log('🛑 FORCE KILL: Stopped main track:', track.kind, track.readyState)
+        })
         setCameraStream(null)
       }
 
       // Stop confirm step camera
       if (confirmStepStreamRef.current) {
         console.log('🔴 FORCE KILL: Stopping confirm step camera')
-        confirmStepStreamRef.current.getTracks().forEach(track => track.stop())
+        confirmStepStreamRef.current.getTracks().forEach(track => {
+          track.stop()
+          console.log('🛑 FORCE KILL: Stopped confirm track:', track.kind, track.readyState)
+        })
         confirmStepStreamRef.current = null
         confirmStepCameraStartedRef.current = false
       }
 
+      // Stop frame streaming
+      if (frameStreamingRef.current) {
+        console.log('🔴 FORCE KILL: Stopping frame streaming')
+        frameStreamingRef.current.stopStreaming()
+        setFrameStreaming(null)
+      }
+
+      // Stop WebRTC cleanup
+      if (webrtcCleanupRef.current) {
+        console.log('🔴 FORCE KILL: WebRTC cleanup')
+        webrtcCleanupRef.current()
+        webrtcCleanupRef.current = null
+        setWebrtcInitialized(false)
+      }
+
       // Destroy any video elements' streams
       const videos = document.querySelectorAll('video')
-      videos.forEach(v => {
+      videos.forEach((v, index) => {
         const video = v as HTMLVideoElement
-        try { video.pause() } catch {}
+        console.log(`🔴 FORCE KILL: Processing video element ${index}`)
+        try { 
+          video.pause() 
+          video.currentTime = 0
+        } catch {}
         if (video.srcObject) {
           console.log('🔴 FORCE KILL: Stopping video element stream')
           const stream = video.srcObject as MediaStream
-          stream.getTracks().forEach(track => track.stop())
+          stream.getTracks().forEach(track => {
+            track.stop()
+            console.log('🛑 FORCE KILL: Stopped video track:', track.kind, track.readyState)
+          })
           video.srcObject = null
         }
         video.removeAttribute('src')
         try { video.load() } catch {}
       })
 
-      // Force stop any remaining getUserMedia streams
+      // Force stop any remaining getUserMedia streams by trying to get a dummy stream and immediately stopping it
       try {
-        const devices = await navigator.mediaDevices.enumerateDevices()
-        const videoDevices = devices.filter(device => device.kind === 'videoinput')
-        console.log('🔴 FORCE KILL: Found video devices:', videoDevices.length)
+        console.log('🔴 FORCE KILL: Attempting to clear any remaining media devices...')
+        const dummyStream = await navigator.mediaDevices.getUserMedia({ video: false, audio: false })
+        dummyStream.getTracks().forEach(track => track.stop())
+        console.log('🔴 FORCE KILL: Cleared dummy stream')
       } catch (e) {
-        console.warn('Device enumeration failed:', e)
+        console.log('🔴 FORCE KILL: Dummy stream clear failed (expected):', e)
       }
 
       // Persist camera status
@@ -986,21 +951,8 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     if (examCompleted) {
       console.log('🚫 Exam completed - forcing camera/audio cleanup')
       
-      // Force WebRTC cleanup
-      if (webrtcCleanupRef.current) {
-        webrtcCleanupRef.current()
-        webrtcCleanupRef.current = null
-        setWebrtcInitialized(false)
-      }
-      
-      // Force camera stream cleanup
-      if (cameraStream) {
-        cameraStream.getTracks().forEach(track => {
-          track.stop()
-          console.log('🛑 Force stopped track on exam completion:', track.kind)
-        })
-        setCameraStream(null)
-      }
+      // Use the comprehensive cleanup function
+      forceKillAllMedia()
     }
   }, [examCompleted])
 
@@ -1043,23 +995,8 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                   <Button
                     onClick={async () => {
                       try {
-                        // Force stop any remaining camera streams
-                        if (cameraStream) {
-                          cameraStream.getTracks().forEach(track => {
-                            track.stop()
-                            console.log('🛑 MANUAL: Stopped track:', track.kind)
-                          })
-                          setCameraStream(null)
-                        }
-                        
-                        // Update database to ensure camera is disabled
-                        if (attempt?.id) {
-                          await supabase
-                            .from('student_exam_attempts')
-                            .update({ camera_enabled: false })
-                            .eq('id', attempt.id)
-                        }
-                        
+                        // Use the comprehensive cleanup function
+                        await forceKillAllMedia()
                         toast.success('Camera turned off manually!')
                       } catch (error) {
                         console.error('Error turning off camera:', error)

@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS public.school_students (
   student_id TEXT NOT NULL UNIQUE, -- Format: YAN001, YAN002, etc.
   full_name TEXT NOT NULL,
   class_level class_level NOT NULL,
+  stream TEXT,
   school_name TEXT NOT NULL,
   email TEXT,
   phone TEXT,
@@ -77,6 +78,7 @@ CREATE OR REPLACE FUNCTION public.add_school_student(
   p_phone TEXT DEFAULT NULL,
   p_parent_name TEXT DEFAULT NULL,
   p_parent_phone TEXT DEFAULT NULL,
+  p_stream TEXT DEFAULT NULL,
   p_admission_date DATE DEFAULT CURRENT_DATE
 )
 RETURNS JSONB AS $$
@@ -92,6 +94,7 @@ BEGIN
     student_id,
     full_name,
     class_level,
+    stream,
     school_name,
     email,
     phone,
@@ -103,6 +106,7 @@ BEGIN
     v_student_id,
     p_full_name,
     p_class_level,
+    p_stream,
     p_school_name,
     p_email,
     p_phone,
@@ -139,6 +143,7 @@ RETURNS TABLE (
   student_id TEXT,
   full_name TEXT,
   class_level class_level,
+  stream TEXT,
   school_name TEXT,
   email TEXT,
   phone TEXT,
@@ -153,6 +158,7 @@ BEGIN
     ss.student_id,
     ss.full_name,
     ss.class_level,
+    ss.stream,
     ss.school_name,
     ss.email,
     ss.phone,
@@ -172,6 +178,7 @@ RETURNS TABLE (
   student_id TEXT,
   full_name TEXT,
   class_level class_level,
+  stream TEXT,
   school_name TEXT,
   admission_date DATE,
   is_active BOOLEAN
@@ -182,6 +189,7 @@ BEGIN
     ss.student_id,
     ss.full_name,
     ss.class_level,
+    ss.stream,
     ss.school_name,
     ss.admission_date,
     ss.is_active

@@ -9,6 +9,7 @@ interface SchoolStudent {
   student_id: string
   full_name: string
   class_level: ClassLevel
+  stream?: string | null
   school_name: string
   email: string | null
   phone: string | null
@@ -57,6 +58,7 @@ export default function SimpleStudentManagement({ teacherId, onClose }: SimpleSt
   const [parentName, setParentName] = useState('')
   const [parentPhone, setParentPhone] = useState('')
   const [bulkText, setBulkText] = useState('')
+  const [stream, setStream] = useState('')
 
   useEffect(() => {
     fetchStudents()
@@ -126,7 +128,8 @@ export default function SimpleStudentManagement({ teacherId, onClose }: SimpleSt
         p_email: email.trim() || null,
         p_phone: phone.trim() || null,
         p_parent_name: parentName.trim() || null,
-        p_parent_phone: parentPhone.trim() || null
+        p_parent_phone: parentPhone.trim() || null,
+        p_stream: ['SS1','SS2','SS3'].includes(classLevel as string) ? (stream.trim() || null) : null
       })
 
       if (error) throw error
@@ -389,6 +392,18 @@ export default function SimpleStudentManagement({ teacherId, onClose }: SimpleSt
                     <option key={level.value} value={level.value}>{level.label}</option>
                   ))}
                 </select>
+                {(['SS1','SS2','SS3'] as const).includes(classLevel as any) && (
+                  <select
+                    value={stream}
+                    onChange={(e) => setStream(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Select Stream</option>
+                    <option value="Science">Science</option>
+                    <option value="Arts">Arts</option>
+                    <option value="Commercial">Commercial</option>
+                  </select>
+                )}
                 <input
                   type="text"
                   placeholder="School Name"

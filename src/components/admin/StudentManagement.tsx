@@ -37,6 +37,7 @@ interface TeacherStudent {
   student_id: string
   full_name: string
   class_level: ClassLevel
+  stream?: string | null
   school_name: string
   email?: string
   phone?: string
@@ -79,6 +80,7 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
   const [parentPhone, setParentPhone] = useState('')
   const [bulkText, setBulkText] = useState('')
   const [selectedCustomId, setSelectedCustomId] = useState('')
+  const [stream, setStream] = useState('')
 
   // Function to get next available YAN ID
   const getNextAvailableId = () => {
@@ -155,6 +157,7 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
     setParentName('')
     setParentPhone('')
     setSelectedCustomId('')
+    setStream('')
     setEditingStudent(null)
   }
 
@@ -175,6 +178,7 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
             student_id: selectedCustomId,
             full_name: fullName.trim(),
             class_level: classLevel,
+            stream: ['SS1','SS2','SS3'].includes(classLevel as string) ? (stream.trim() || null) : null,
             school_name: schoolName.trim(),
             email: email.trim() || null,
             phone: phone.trim() || null,
@@ -197,7 +201,8 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
           p_email: email.trim() || null,
           p_phone: phone.trim() || null,
           p_parent_name: parentName.trim() || null,
-          p_parent_phone: parentPhone.trim() || null
+          p_parent_phone: parentPhone.trim() || null,
+          p_stream: ['SS1','SS2','SS3'].includes(classLevel as string) ? (stream.trim() || null) : null
         })
 
         if (error) throw error
@@ -231,6 +236,7 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
         .update({
           full_name: fullName.trim(),
           class_level: classLevel,
+          stream: ['SS1','SS2','SS3'].includes(classLevel as string) ? (stream.trim() || null) : null,
           school_name: schoolName.trim(),
           email: email.trim() || null,
           phone: phone.trim() || null,
@@ -369,6 +375,7 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
     setPhone(student.phone || '')
     setParentName(student.parent_name || '')
     setParentPhone(student.parent_phone || '')
+    setStream(student.stream || '')
     setShowAddForm(true)
   }
 
@@ -690,6 +697,22 @@ export default function StudentManagement({ teacherId, onClose }: StudentManagem
                         placeholder="Select class level"
                       />
                     </div>
+
+                    {['SS1','SS2','SS3'].includes(classLevel as string) && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <EnhancedSelect
+                          label="Stream (SS only)"
+                          options={[
+                            { value: 'Science', label: 'Science' },
+                            { value: 'Arts', label: 'Arts' },
+                            { value: 'Commercial', label: 'Commercial' },
+                          ]}
+                          value={stream}
+                          onChange={(value) => setStream(String(value))}
+                          placeholder="Select stream"
+                        />
+                      </div>
+                    )}
 
                     <FloatingInput
                       label="School Name *"
