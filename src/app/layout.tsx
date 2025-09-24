@@ -17,6 +17,11 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "YANO Exam Platform",
   description: "Nigerian exam platform for JSS and SS students",
+  icons: {
+    icon: "/yano-logo.png",
+    shortcut: "/yano-logo.png",
+    apple: "/yano-logo.png",
+  },
 };
 
 export default function RootLayout({
@@ -26,6 +31,9 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        <link rel="icon" href="/yano-logo.png" />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

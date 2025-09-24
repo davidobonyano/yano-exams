@@ -30,21 +30,23 @@ export default function TeacherAuth() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
+          options: {
+            emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : undefined,
+            data: { full_name: fullName }
+          }
         })
         if (error) throw error
 
         if (data.user) {
-          // Create teacher profile
+          // Create or update teacher profile via upsert to avoid conflicts
           const { error: profileError } = await supabase
             .from('teachers')
-            .insert([
-              {
-                id: data.user.id,
-                full_name: fullName,
-                email: email,
-                school_name: schoolName,
-              },
-            ])
+            .upsert({
+              id: data.user.id,
+              full_name: fullName,
+              email: email,
+              school_name: schoolName,
+            }, { onConflict: 'id' })
 
           if (profileError) throw profileError
           setMessage('Account created successfully! Please check your email to verify your account.')
@@ -52,6 +54,31 @@ export default function TeacherAuth() {
       }
     } catch (error: unknown) {
       setError(error instanceof Error ? error.message : 'An error occurred')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResendVerification = async () => {
+    setLoading(true)
+    setError('')
+    setMessage('')
+    try {
+      if (!email) {
+        setError('Enter your email first')
+        return
+      }
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email,
+        options: {
+          emailRedirectTo: typeof window !== 'undefined' ? `${window.location.origin}/dashboard` : undefined,
+        },
+      })
+      if (error) throw error
+      setMessage('Verification email sent. Please check your inbox/spam folder.')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to resend verification email')
     } finally {
       setLoading(false)
     }
@@ -137,6 +164,18 @@ export default function TeacherAuth() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
+              {!isLogin && (
+                <div className="mt-2 flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleResendVerification}
+                    className="text-xs text-indigo-600 hover:text-indigo-700"
+                    disabled={loading || !email}
+                  >
+                    Resend verification email
+                  </button>
+                </div>
+              )}
             </div>
 
             <div>

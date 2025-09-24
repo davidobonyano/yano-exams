@@ -60,66 +60,32 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
 
   const fetchTeacherDataSilently = async () => {
     try {
-      // Silent refresh - no loading state changes
       console.log('Silently refreshing teacher data for user:', user.id)
 
-      // Fetch teacher profile
       const { data: teacherData, error: teacherError } = await supabase
         .from('teachers')
         .select('*')
         .eq('id', user.id)
         .single()
 
-      if (teacherError && teacherError.code !== 'PGRST116') {
-        console.error('Error fetching teacher:', teacherError)
-        return
-      }
+      if (!teacherError && teacherData) setTeacher(teacherData)
 
-      if (teacherData) {
-        setTeacher(teacherData)
-      }
-
-      // Fetch teacher's exams - try created_by first, fallback to all exams if none found
-      let { data: examsData, error: examsError } = await supabase
+      // Only fetch exams created by this teacher
+      const { data: examsData, error: examsError } = await supabase
         .from('exams')
         .select('*')
         .eq('created_by', user.id)
         .order('created_at', { ascending: false })
 
-      // If no exams found with created_by, fetch all exams (teacher has admin access)
-      if (!examsData || examsData.length === 0) {
-        console.log('No exams found with created_by, fetching all exams')
-        const { data: allExamsData, error: allExamsError } = await supabase
-          .from('exams')
-          .select('*')
-          .order('created_at', { ascending: false })
-        
-        if (allExamsError) {
-          console.error('Error fetching all exams:', allExamsError)
-        } else {
-          examsData = allExamsData
-          examsError = null
-        }
-      }
+      if (!examsError) setExams(examsData || [])
 
-      if (examsError) {
-        console.error('Error fetching exams:', examsError)
-      } else {
-        setExams(examsData || [])
-      }
-
-      // Fetch teacher's sessions
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('exam_sessions')
         .select('*')
         .eq('teacher_id', user.id)
         .order('created_at', { ascending: false })
 
-      if (sessionsError) {
-        console.error('Error fetching sessions:', sessionsError)
-      } else {
-        setSessions(sessionsData || [])
-      }
+      if (!sessionsError) setSessions(sessionsData || [])
 
     } catch (error) {
       console.error('Error during silent refresh:', error)
@@ -131,7 +97,6 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
       setLoading(true)
       console.log('Fetching teacher data for user:', user.id)
 
-      // Fetch teacher profile
       const { data: teacherData, error: teacherError } = await supabase
         .from('teachers')
         .select('*')
@@ -141,21 +106,20 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
       console.log('Teacher query result:', { teacherData, teacherError })
 
       if (teacherError && teacherError.code === 'PGRST116') {
-        // Teacher profile doesn't exist, create it
-        console.log('Creating new teacher profile')
-        const { data: newTeacher, error: createError } = await supabase
+        console.log('Creating new teacher profile via upsert')
+        const { data: newTeacher, error: upsertError } = await supabase
           .from('teachers')
-          .insert([{
+          .upsert({
             id: user.id,
             full_name: user.user_metadata?.full_name || user.email?.split('@')[0] || 'Teacher',
             email: user.email!,
             school_name: ''
-          }])
+          }, { onConflict: 'id' })
           .select()
           .single()
 
-        console.log('Create teacher result:', { newTeacher, createError })
-        if (createError) throw createError
+        console.log('Upsert teacher result:', { newTeacher, upsertError })
+        if (upsertError) throw upsertError
         setTeacher(newTeacher)
       } else if (teacherError) {
         throw teacherError
@@ -163,35 +127,18 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
         setTeacher(teacherData)
       }
 
-      // Fetch teacher's exams - try created_by first, fallback to all exams if none found
+      // Only fetch exams created by this teacher
       console.log('Fetching exams for teacher:', user.id)
-      let { data: examsData, error: examsError } = await supabase
+      const { data: examsData, error: examsError } = await supabase
         .from('exams')
         .select('*')
         .eq('created_by', user.id)
         .order('created_at', { ascending: false })
 
-      // If no exams found with created_by, fetch all exams (teacher has admin access)
-      if (!examsData || examsData.length === 0) {
-        console.log('No exams found with created_by, fetching all exams')
-        const { data: allExamsData, error: allExamsError } = await supabase
-          .from('exams')
-          .select('*')
-          .order('created_at', { ascending: false })
-        
-        if (allExamsError) {
-          console.error('Error fetching all exams:', allExamsError)
-        } else {
-          examsData = allExamsData
-          examsError = null
-        }
-      }
-
       console.log('Exams query result:', { examsData, examsError })
       if (examsError) throw examsError
       setExams(examsData || [])
 
-      // Fetch teacher's sessions
       console.log('Fetching sessions for teacher:', user.id)
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('exam_sessions')
@@ -206,7 +153,6 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
       console.log('Successfully loaded teacher dashboard data')
     } catch (error) {
       console.error('Error fetching teacher data:', error)
-      // Don't let the loading state persist on error
       setLoading(false)
     } finally {
       setLoading(false)
@@ -260,8 +206,8 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
       if (error) throw error
 
       const result = data
-      if (!result.success) {
-        toast.error(result.error)
+      if (!result?.success) {
+        toast.error(result?.error || 'Unable to delete exam')
         return
       }
 
@@ -277,14 +223,14 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
     try {
       const { data, error } = await supabase.rpc('create_demo_exam', {
         p_teacher_id: user.id,
-        p_class_level: 'JSS1' // Default to JSS1
+        p_class_level: 'JSS1'
       })
 
       if (error) throw error
 
       const result = data
-      if (!result.success) {
-        toast.error(result.error)
+      if (!result?.success) {
+        toast.error(result?.error || 'Failed to create demo exam')
         return
       }
 
@@ -302,12 +248,10 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
     const startTime = new Date(session.starts_at)
     const endTime = new Date(session.ends_at)
 
-    // If session is manually ended or cancelled, respect that status
     if (session.status === 'ended' || session.status === 'cancelled') {
       return session.status
     }
 
-    // Check time-based status
     if (now < startTime) {
       return 'scheduled'
     } else if (now >= startTime && now <= endTime && session.status === 'active') {
@@ -331,7 +275,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
         .from('exam_sessions')
         .delete()
         .eq('id', deleteSessionModal.sessionId)
-        .eq('teacher_id', user.id) // Ensure teacher can only delete their own sessions
+        .eq('teacher_id', user.id)
 
       if (error) throw error
 
@@ -382,7 +326,6 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
       setCopiedSessions(prev => new Set(prev).add(sessionId))
       toast.success(`Session code ${sessionCode} copied to clipboard!`)
       
-      // Reset copied state after 2 seconds
       setTimeout(() => {
         setCopiedSessions(prev => {
           const newSet = new Set(prev)
