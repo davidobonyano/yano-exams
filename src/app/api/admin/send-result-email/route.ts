@@ -3,6 +3,33 @@ import { createClient } from '@supabase/supabase-js'
 import nodemailer from 'nodemailer'
 import { generateResultsPDF } from '@/lib/pdf-generator'
 import { getDetailedStudentResults } from '@/lib/auto-scoring'
+import { Exam, StudentExamAttempt, ExamResult } from '@/types/database-v2'
+
+interface ResultRow {
+  id: string
+  correct_answers: number
+  total_questions: number
+  percentage_score: number
+  passed: boolean
+  created_at: string
+  students: {
+    full_name: string
+    student_id: string
+    class_level: string
+  }
+  exams: {
+    title: string
+  }
+  exam_sessions: {
+    session_name: string
+    session_code: string
+    teacher_id: string
+  }
+  student_exam_attempts: {
+    id: string
+  } | null
+  attempt_id?: string
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,7 +80,7 @@ export async function POST(req: NextRequest) {
         )
       `)
       .eq('id', resultId)
-      .single()
+      .single<ResultRow>()
 
     console.log('Result data:', { resultData, resultError })
 
@@ -99,38 +126,40 @@ export async function POST(req: NextRequest) {
     console.log('Attempt ID for PDF:', attemptId)
     
     // Get detailed results for PDF
-    const detailedResults = await getDetailedStudentResults(attemptId)
+    const detailedResults = await getDetailedStudentResults(attemptId!)
     console.log('Detailed results for PDF:', { 
       success: detailedResults?.success, 
       hasAttemptInfo: !!detailedResults?.attempt_info,
       error: detailedResults?.error 
     })
     
-    let pdfBuffer = null
+    let pdfBuffer: Buffer | null = null
     let filename = `exam_results_${studentName.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`
     
     if (detailedResults?.success) {
-      const attemptInfo = detailedResults.attempt_info
+      const attemptInfo = detailedResults.attempt_info!
       
       // Create data objects for PDF generation
-      const exam = {
+      const exam: Exam = {
         id: attemptInfo.exam_id,
         title: attemptInfo.exam_title,
         total_questions: attemptInfo.total_questions,
         passing_score: attemptInfo.passing_score,
         duration_minutes: 0,
-        class_level: 'primary_1',
+        class_level: 'JSS1',
         is_active: true,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
+        description: undefined,
+        created_by: undefined,
       }
 
-      const attempt = {
+      const attempt: StudentExamAttempt = {
         id: attemptInfo.attempt_id,
         student_id: attemptInfo.student_id,
         exam_id: attemptInfo.exam_id,
         session_id: attemptInfo.session_id,
-        status: attemptInfo.status,
+        status: 'completed',
         started_at: attemptInfo.started_at,
         completed_at: attemptInfo.completed_at,
         submitted_at: attemptInfo.submitted_at,
@@ -138,7 +167,7 @@ export async function POST(req: NextRequest) {
         created_at: new Date().toISOString()
       }
 
-      const result = {
+      const result: ExamResult = {
         id: attemptInfo.attempt_id,
         attempt_id: attemptInfo.attempt_id,
         student_id: attemptInfo.student_id,
@@ -161,9 +190,9 @@ export async function POST(req: NextRequest) {
         })
         
         const pdf = await generateResultsPDF({
-          exam: exam as any,
-          attempt: attempt as any,
-          result: result as any,
+          exam,
+          attempt,
+          result,
           studentName: attemptInfo.student_name,
           sessionCode: attemptInfo.session_code || resultData.exam_sessions.session_code
         })

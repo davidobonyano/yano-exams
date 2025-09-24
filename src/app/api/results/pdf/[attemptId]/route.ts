@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
 import { generateResultsPDF } from '@/lib/pdf-generator'
 import { getDetailedStudentResults } from '@/lib/auto-scoring'
+import { Exam, StudentExamAttempt } from '@/types/database-v2'
 
 export async function GET(
   req: NextRequest,
@@ -17,7 +17,6 @@ export async function GET(
       )
     }
 
-    // Get detailed results
     const detailedResults = await getDetailedStudentResults(attemptId)
     
     if (!detailedResults?.success) {
@@ -29,25 +28,26 @@ export async function GET(
 
     const attemptInfo = detailedResults.attempt_info
 
-    // Create the data objects needed for PDF generation
-    const exam = {
+    const exam: Exam = {
       id: attemptInfo.exam_id,
       title: attemptInfo.exam_title,
       total_questions: attemptInfo.total_questions,
       passing_score: attemptInfo.passing_score,
       duration_minutes: 0,
-      class_level: 'primary_1' as any,
+      class_level: 'JSS1',
       is_active: true,
       created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
+      description: undefined,
+      created_by: undefined,
     }
 
-    const attempt = {
+    const attempt: StudentExamAttempt = {
       id: attemptInfo.attempt_id,
       student_id: attemptInfo.student_id,
       exam_id: attemptInfo.exam_id,
       session_id: attemptInfo.session_id,
-      status: attemptInfo.status as any,
+      status: 'completed',
       started_at: attemptInfo.started_at,
       completed_at: attemptInfo.completed_at,
       submitted_at: attemptInfo.submitted_at,
@@ -70,7 +70,6 @@ export async function GET(
       created_at: new Date().toISOString()
     }
 
-    // Generate PDF
     const pdf = await generateResultsPDF({
       exam,
       attempt,
@@ -79,13 +78,10 @@ export async function GET(
       sessionCode: attemptInfo.session_code || 'Unknown Session'
     })
 
-    // Convert PDF to buffer
     const pdfBuffer = Buffer.from(pdf.output('arraybuffer'))
     
-    // Create filename
     const filename = `${exam.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_results_${attemptInfo.student_name.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.pdf`
 
-    // Return PDF as response
     return new NextResponse(pdfBuffer, {
       status: 200,
       headers: {

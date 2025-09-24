@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'react-hot-toast'
 import { ClassLevel } from '@/types/database'
@@ -66,12 +66,7 @@ export default function CentralizedStudentManagement({ teacherId, onClose }: Cen
   const [parentPhone, setParentPhone] = useState('')
   const [bulkText, setBulkText] = useState('')
 
-  useEffect(() => {
-    fetchStudents()
-    fetchClassStatistics()
-  }, [teacherId, selectedClass, selectedSection, selectedYear])
-
-  const fetchStudents = async () => {
+  const fetchStudents = useCallback(async () => {
     try {
       setLoading(true)
       const { data, error } = await supabase.rpc('get_all_students_for_admin', {
@@ -88,9 +83,9 @@ export default function CentralizedStudentManagement({ teacherId, onClose }: Cen
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedYear, selectedClass, selectedSection])
 
-  const fetchClassStatistics = async () => {
+  const fetchClassStatistics = useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc('get_class_statistics')
       if (error) throw error
@@ -98,7 +93,12 @@ export default function CentralizedStudentManagement({ teacherId, onClose }: Cen
     } catch (error) {
       console.error('Error fetching class statistics:', error)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    fetchStudents()
+    fetchClassStatistics()
+  }, [teacherId, fetchStudents, fetchClassStatistics])
 
   const resetForm = () => {
     setFullName('')
@@ -207,13 +207,7 @@ export default function CentralizedStudentManagement({ teacherId, onClose }: Cen
     student.school_name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const getClassStats = (classLevel: ClassLevel, section: string, year: number) => {
-    return classStats.find(stat => 
-      stat.class_level === classLevel && 
-      stat.section === section && 
-      stat.academic_year === year
-    )
-  }
+  // Note: previously had an unused helper getClassStats; removed to satisfy linter
 
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">

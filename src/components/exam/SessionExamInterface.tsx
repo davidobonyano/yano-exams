@@ -1,11 +1,11 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useSession } from '@/context/SimpleSessionContext'
 import { supabase } from '@/lib/supabase'
-import { Question, StudentExamAttempt, StudentAnswer, Exam } from '@/types/database-v2'
+import { Question, StudentExamAttempt, Exam } from '@/types/database-v2'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
@@ -14,21 +14,18 @@ import { Badge } from '@/components/ui/badge'
 import { calculateAndSaveScore, validateAndMarkAnswers } from '@/lib/auto-scoring'
 import { AnimatedBackground } from '@/components/ui/animated-background'
 import { VideoStream } from '@/components/ui/video-stream'
-import { Clock, AlertTriangle, Wifi, WifiOff, BookOpen, CheckCircle, Circle, ArrowLeft, ArrowRight, Send, Eye, EyeOff, Timer, Target, Zap, Camera, CameraOff, BarChart3, ChevronLeft, ChevronRight, RotateCcw, Flag, Mic } from 'lucide-react'
+import { AlertTriangle, Wifi, WifiOff, CheckCircle, Circle, ArrowLeft, ArrowRight, Send, Timer, Target, Zap, Camera, CameraOff, BarChart3, Flag } from 'lucide-react'
 import { useCheatingDetection } from '@/hooks/useCheatingDetection'
-import PersistentExamTimer from './PersistentExamTimer'
 import { useServerAnchoredTimer } from '@/hooks/useServerAnchoredTimer'
 import SessionQuestionDisplay from './SessionQuestionDisplay'
 import ExamInstructions from './ExamInstructions'
 import DemoExam from './DemoExam'
-
 
 import SubmitConfirmationModal from './SubmitConfirmationModal'
 import StudentWarningDisplay from './StudentWarningDisplay'
 import { StudentWebRTC as OldStudentWebRTC } from '@/lib/webrtc'
 import { shuffleQuestionsForStudent } from '@/lib/question-shuffler'
 import { CameraFrameStreaming } from '@/lib/camera-streaming'
-import StudentWebRTC from './StudentWebRTC'
 import toast from 'react-hot-toast'
 function ServerAnchoredTimerUI({ attemptId, onTimeUp }: { attemptId: string; onTimeUp: () => void }) {
   const { remainingSeconds, serverSynced } = useServerAnchoredTimer({ attemptId, onTimeUp })
@@ -64,7 +61,6 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
   const sessionId = session?.session.id
   
   const [questions, setQuestions] = useState<Question[]>([])
-  const [questionsMap, setQuestionsMap] = useState<Record<string, Question>>({})
   const [attempt, setAttempt] = useState<StudentExamAttempt | null>(null)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
@@ -75,13 +71,12 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
   const [showInstructions, setShowInstructions] = useState(true)
   const [showDemo, setShowDemo] = useState(false)
   const [upcomingExams, setUpcomingExams] = useState<Array<{title: string, date: string, duration: number}>>([])
-  const [loadingUpcoming, setLoadingUpcoming] = useState(true)
   const [examStarted, setExamStarted] = useState(false)
   const [cameraAccessRequired, setCameraAccessRequired] = useState(false)
   const [cameraStream, setCameraStream] = useState<MediaStream | null>(null)
-  const [webrtcInitialized, setWebrtcInitialized] = useState(false)
+  const [_webrtcInitialized, setWebrtcInitialized] = useState(false)
 
-  const [webrtcConnection, setWebrtcConnection] = useState<OldStudentWebRTC | null>(null)
+  const [webrtcConnection, _setWebrtcConnection] = useState<OldStudentWebRTC | null>(null)
 
   const [frameStreaming, setFrameStreaming] = useState<CameraFrameStreaming | null>(null)
   const [step, setStep] = useState<'none' | 'confirm' | 'submitting' | 'success'>('none')
@@ -226,19 +221,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     }, 100)
   }
 
-  const handleCameraDeclined = () => {
-    cameraPromptShown.current = false // Reset the ref
-    if (cameraAccessRequired) {
-      // If camera is required, redirect back
-      toast.error('Camera access is required for this exam')
-      router.push('/')
-    } else {
-      // If optional, continue without camera
-      if (session) {
-        initializeExam()
-      }
-    }
-  }
+  // Camera declined handler removed (unused)
 
   // Validate session context
   useEffect(() => {
@@ -262,9 +245,11 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     
     console.log('Session validation passed, initializing exam...')
 
-    // Always initialize exam first, handle camera separately
-    console.log('About to call initializeExam')
-    initializeExam()
+    // Initialize exam only once
+    if (!examInitialized) {
+      console.log('About to call initializeExam')
+      initializeExam()
+    }
     
     // Handle camera after exam is initialized
     const cameraRequired = session.session.camera_monitoring_enabled === true
@@ -275,7 +260,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       setCameraAccessRequired(true)
       cameraPromptShown.current = true
     }
-  }, [session, sessionId, examId, cameraStream, examCompleted, examInitialized, cameraAccessDisabled])
+  }, [session, sessionId, examId, cameraStream, examCompleted, examInitialized, cameraAccessDisabled, propExamId])
 
   // Enhanced cheating detection is now handled by the useCheatingDetection hook
   // Additional activity tracking when exam is active
@@ -371,14 +356,14 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     return () => {
       cancelled = true
     }
-  }, [session, attempt, cameraStream, examCompleted, cameraAccessDisabled])
+  }, [session, attempt, cameraStream, examCompleted, cameraAccessDisabled, handleCameraGranted])
 
   // Load upcoming exams when session is available
   useEffect(() => {
     if (session?.student?.class_level && showInstructions) {
       loadUpcomingExams()
     }
-  }, [session?.student?.class_level, showInstructions])
+  }, [session?.student?.class_level, showInstructions, loadUpcomingExams])
 
   // Cleanup camera and WebRTC on component unmount only
   useEffect(() => {
@@ -403,8 +388,6 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         }
       }
       
-      // WebRTC cleanup handled by StudentWebRTC component
-      
       // Cleanup frame streaming
       if (frameStreamingRef.current) {
         console.log('Unmount: Stopping frame streaming')
@@ -415,7 +398,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
   // Cheating logging is now handled by the useCheatingDetection hook
 
-  const initializeExam = async () => {
+  async function initializeExam() {
     console.log('=== INITIALIZE EXAM CALLED ===')
     console.log('Session in initializeExam:', session)
     console.log('examId:', examId)
@@ -482,16 +465,10 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       console.log(`Loaded ${questionsData.length} questions for exam`)
 
       // Deterministic shuffle: consistent per (student, exam), stable across reloads
-      const shuffled = shuffleQuestionsForStudent(questionsData as any, session.student.id, examId)
-      setQuestions(shuffled as any)
+      const shuffled = shuffleQuestionsForStudent((questionsData as unknown) as Question[], session.student.id, examId)
+      // Use shuffled items directly; they are compatible with Question
+      setQuestions(shuffled)
       
-      // Create questions map for fast lookup
-      const qMap: Record<string, Question> = {}
-      questionsData.forEach((question: Question) => {
-        qMap[question.id] = question
-      })
-      setQuestionsMap(qMap)
-
       // Load existing answers if resuming
       if (attemptData && attemptData.status === 'in_progress') {
         const { data: answersData, error: answersError } = await supabase
@@ -591,7 +568,10 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       console.error('Error starting exam:', err)
       console.error('Error type:', typeof err)
       console.error('Error details:', JSON.stringify(err, null, 2))
-      console.error('Error constructor:', err?.constructor?.name)
+      if (err && typeof err === 'object' && 'constructor' in err) {
+        // Narrow without using any
+        console.error('Error constructor:', (err as { constructor?: { name?: string } }).constructor?.name)
+      }
       setError(err instanceof Error ? err.message : 'Failed to start exam')
     }
   }
@@ -637,7 +617,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
     }, 500)
   }
 
-  const loadUpcomingExams = async () => {
+  async function loadUpcomingExams() {
     if (!session?.student?.class_level) return
     
     try {
@@ -677,8 +657,6 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       setUpcomingExams(formattedExams)
     } catch (error) {
       console.error('Error loading upcoming exams:', error)
-    } finally {
-      setLoadingUpcoming(false)
     }
   }
 
@@ -749,7 +727,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
   const handleSubmitClick = useCallback(() => {
     if (step === 'submitting' || step === 'success') return
     setStep('confirm')
-  }, [step])
+  }, [step, session?.session?.camera_monitoring_enabled])
 
   // Step-scoped camera handling for confirmation flow
   useEffect(() => {
@@ -906,7 +884,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         router.push('/dashboard?examSubmitted=true')
       }
     }, 1500)
-  }, [step, submitExam, router, session, attempt])
+  }, [step, submitExam, router, session, attempt, forceKillAllMedia])
 
   const handleSubmitCancel = useCallback(() => {
     if (step === 'submitting') return
@@ -932,7 +910,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
         router.push('/dashboard?examSubmitted=true')
       }
     }, 1500)
-  }, [attempt, session, step, router])
+  }, [attempt, session, step, router, forceKillAllMedia, submitExam])
 
   // Cleanup WebRTC connection and save timeout on component unmount
   useEffect(() => {
@@ -954,7 +932,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
       // Use the comprehensive cleanup function
       forceKillAllMedia()
     }
-  }, [examCompleted])
+  }, [examCompleted, forceKillAllMedia])
 
   // Show exam completion success state
   if (examCompleted) {
@@ -1226,13 +1204,6 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
 
   const progressPercentage = (Object.keys(answers).length / questions.length) * 100
   const timeRemaining = Math.max(0, (attempt?.time_remaining || 0))
-  const totalTime = session.exam.duration_minutes * 60
-  const timeProgress = ((totalTime - timeRemaining) / totalTime) * 100
-  const showResults = session?.session?.show_results_after_submit || false
-
-  // Debug render state (removed for cleaner logs)
-
-
 
   return (
     <div className="min-h-screen relative overflow-hidden" style={{ userSelect: 'none' }}>
@@ -1412,7 +1383,7 @@ export default function SessionExamInterface({ examId: propExamId }: SessionExam
                       >
                         <Button
                           onClick={() => {
-                                                          const newIndex = Math.max(0, currentQuestionIndex - 1)
+                                                      const newIndex = Math.max(0, currentQuestionIndex - 1)
                               setCurrentQuestionIndex(newIndex)
                               setVisitedQuestions(prev => new Set(prev).add(newIndex))
                               if (attempt?.id) {

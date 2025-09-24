@@ -1,18 +1,9 @@
 // Question Shuffling Utilities
 // Ensures each student gets questions in different order for fair assessment
-
-interface Question {
-  id: string
-  question_text: string
-  question_type: string
-  options: { [key: string]: string } | null
-  correct_answer: string
-  points: number
-  explanation?: string
-}
+import { Question, QuestionType } from '@/types/database-v2'
 
 interface ShuffledQuestion extends Question {
-  shuffled_options?: { [key: string]: string } | null
+  shuffled_options?: { [key: string]: string }
   original_correct_answer: string
   shuffled_correct_answer: string
 }
@@ -125,13 +116,9 @@ export async function getShuffledQuestionsForStudent(
   examId: string,
   studentId: string
 ): Promise<ShuffledQuestion[]> {
-  // This would typically fetch from your database
-  // For now, return the shuffle logic that can be used with fetched questions
-  
-  // Example usage:
-  // const questions = await fetchQuestionsFromDB(examId)
-  // return shuffleQuestionsForStudent(questions, studentId, examId)
-  
+  // Placeholder: fetch and shuffle elsewhere
+  void examId
+  void studentId
   return []
 }
 
@@ -188,7 +175,7 @@ export function generateStudentQuestionOrder(
       const mapping: { [originalKey: string]: string } = {}
       Object.entries(question.shuffled_options).forEach(([newKey, value]) => {
         // Find original key for this value
-        const originalEntry = Object.entries(question.options || {}).find(([_, v]) => v === value)
+        const originalEntry = Object.entries(question.options || {}).find(([originalKey, v]) => v === value)
         if (originalEntry) {
           mapping[originalEntry[0]] = newKey
         }
@@ -214,19 +201,23 @@ export function testShuffling() {
   const sampleQuestions: Question[] = [
     {
       id: '1',
+      exam_id: 'EXAM001',
       question_text: 'What is 2 + 2?',
-      question_type: 'multiple_choice',
+      question_type: 'multiple_choice' as QuestionType,
       options: { A: '3', B: '4', C: '5', D: '6' },
       correct_answer: 'B',
-      points: 1
+      points: 1,
+      created_at: new Date().toISOString()
     },
     {
       id: '2',
+      exam_id: 'EXAM001',
       question_text: 'Is earth round?',
-      question_type: 'true_false',
+      question_type: 'true_false' as QuestionType,
       options: { A: 'True', B: 'False' },
       correct_answer: 'A',
-      points: 1
+      points: 1,
+      created_at: new Date().toISOString()
     }
   ]
   

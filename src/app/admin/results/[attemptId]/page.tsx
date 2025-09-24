@@ -1,9 +1,9 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useRouter, useParams } from 'next/navigation'
-import { User } from '@supabase/supabase-js'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
+import { useRouter, useParams } from 'next/navigation'
 import { DetailedStudentResult } from '@/lib/auto-scoring'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -12,34 +12,19 @@ import {
   CheckCircle, 
   XCircle, 
   Award,
-  Clock,
   User as UserIcon
 } from 'lucide-react'
-import Link from 'next/link'
 
 export default function StudentResultsPage() {
   const params = useParams()
   const router = useRouter()
   const attemptId = params.attemptId as string
   
-  const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [studentDetails, setStudentDetails] = useState<DetailedStudentResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    // Check authentication
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null)
-      if (!session?.user) {
-        router.push('/admin')
-        return
-      }
-      loadStudentDetails()
-    })
-  }, [attemptId, router])
-
-  const loadStudentDetails = async () => {
+  const loadStudentDetails = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -65,7 +50,18 @@ export default function StudentResultsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [attemptId])
+
+  useEffect(() => {
+    // Check authentication
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (!session?.user) {
+        router.push('/admin')
+        return
+      }
+      loadStudentDetails()
+    })
+  }, [attemptId, router, loadStudentDetails])
 
   if (loading) {
     return (

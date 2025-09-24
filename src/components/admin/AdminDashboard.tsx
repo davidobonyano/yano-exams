@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import { User } from '@supabase/supabase-js'
 import { motion } from 'framer-motion'
 import { 
@@ -22,9 +23,6 @@ import RealTimeStudentProgress from './RealTimeStudentProgress'
 import SessionResults from './SessionResults'
 import CameraMonitor from './CameraMonitor'
 import { AnimatedBackground } from '@/components/ui/animated-background'
-import { TextReveal, GradientText } from '@/components/ui/text-effects'
-import { AnimatedCard } from '@/components/ui/animated-cards'
-import { AnimatedCounter } from '@/components/ui/progress-rings'
 import toast from 'react-hot-toast'
 
 interface AdminDashboardProps {
@@ -556,7 +554,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
               </div>
             </button>
             
-            <a
+            <Link
               href="/admin/results"
               className="group relative bg-gradient-to-br from-violet-500 to-purple-600 hover:from-violet-600 hover:to-purple-700 text-white p-6 rounded-2xl shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1"
             >
@@ -569,7 +567,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
                   <p className="text-xs text-white/80 mt-1">Manage exam results</p>
                 </div>
               </div>
-            </a>
+            </Link>
 
           </div>
         </div>

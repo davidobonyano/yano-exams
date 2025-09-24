@@ -2,10 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import {
-  SimpleSessionProvider,
-  useSession,
-} from "@/context/SimpleSessionContext";
+import { useSession } from "@/context/SimpleSessionContext";
 import { supabase } from "@/lib/supabase";
 import SimpleStudentLogin from "@/components/auth/SimpleStudentLogin";
 import DemoExam from "@/components/exam/DemoExam";
@@ -215,9 +212,5 @@ function StudentPortalContent() {
 }
 
 export default function StudentPortal() {
-  return (
-    <SimpleSessionProvider>
-      <StudentPortalContent />
-    </SimpleSessionProvider>
-  );
+  return <StudentPortalContent />;
 }

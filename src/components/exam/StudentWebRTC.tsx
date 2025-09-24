@@ -1,11 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { signalingChannelFor } from "@/utils/signaling";
-import { getRtcConfiguration } from "@/lib/rtcConfig";
-import { supabase } from "@/lib/supabase";
 
 // Centralized RTC configuration (STUN/TURN)
-const rtcConfig: RTCConfiguration = getRtcConfiguration();
+// Removed unused rtcConfig and imports to satisfy lints
 
 interface StudentWebRTCProps {
   studentId: string;
@@ -21,7 +18,7 @@ export default function StudentWebRTC({ studentId, onStreamReady, onCleanupRef, 
   const [error, setError] = useState<string | null>(null);
   const setupRef = useRef(false);
   const offerSentRef = useRef(false);
-  const nuclearChannelRef = useRef<any>(null);
+  const nuclearChannelRef = useRef<RTCDataChannel | null>(null);
 
   useEffect(() => {
     if (!studentId) return;
@@ -49,18 +46,14 @@ export default function StudentWebRTC({ studentId, onStreamReady, onCleanupRef, 
           onStreamReady(stream);
         }
 
-        // 2) Disable WebRTC live streaming and signaling
-
         const cleanup = () => {
           console.log('🧹 Starting AGGRESSIVE WebRTC cleanup...');
           
-          // FORCE stop all media tracks immediately
           if (localStreamRef.current) {
             console.log('🛑 FORCE stopping all media tracks');
             localStreamRef.current.getTracks().forEach((track) => {
               console.log('🔴 Stopping track:', track.kind, track.label, 'enabled:', track.enabled, 'state:', track.readyState);
               track.stop();
-              // Double-check it's really stopped
               setTimeout(() => {
                 console.log('🔍 Track state after stop:', track.kind, track.readyState);
               }, 100);
@@ -68,14 +61,13 @@ export default function StudentWebRTC({ studentId, onStreamReady, onCleanupRef, 
             localStreamRef.current = null;
           }
           
-          // No peer connections or channels in this mode
+          pcRef.current = null;
+          nuclearChannelRef.current = null;
           
-          // Reset all flags
           setupRef.current = false;
           offerSentRef.current = false;
           setReady(false);
           
-          // Notify parent that stream stopped
           if (onStreamStopped) {
             onStreamStopped();
           }
@@ -83,7 +75,6 @@ export default function StudentWebRTC({ studentId, onStreamReady, onCleanupRef, 
           console.log('✅ Student WebRTC AGGRESSIVELY cleaned up - camera should be OFF');
         };
         
-        // Provide cleanup function to parent
         if (onCleanupRef) {
           onCleanupRef(cleanup);
         }
@@ -97,7 +88,7 @@ export default function StudentWebRTC({ studentId, onStreamReady, onCleanupRef, 
     };
 
     setup();
-  }, [studentId]);
+  }, [studentId, onCleanupRef, onStreamReady, onStreamStopped]);
 
   if (error) {
     return (

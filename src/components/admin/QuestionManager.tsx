@@ -21,7 +21,7 @@ import {
   FileText,
   Shuffle,
   Eye,
-  Image,
+  Image as ImageIcon,
   Trash
 } from 'lucide-react'
 import toast from 'react-hot-toast'
@@ -607,7 +607,7 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                               <div className="mt-2 p-2 bg-blue-50 rounded border">
                                 <img
                                   src={question.image_data}
-                                  alt="Question diagram"
+                                  alt="Question image"
                                   className="max-w-full max-h-24 rounded object-contain mx-auto"
                                 />
                                 <p className="text-xs text-blue-600 mt-1 text-center">📊 Includes visual element</p>
@@ -835,7 +835,7 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                     {/* Image Upload Section */}
                     <div className="space-y-4">
                       <h4 className="font-medium text-gray-700 flex items-center">
-                        <Image className="w-4 h-4 mr-2" />
+                        <ImageIcon className="w-4 h-4 mr-2" />
                         Add Image/Diagram (Optional)
                       </h4>
                       <p className="text-sm text-gray-500">
@@ -955,15 +955,15 @@ export default function QuestionManager({ examId, examTitle, totalQuestions, onC
                         <p className="font-medium">📋 Multiple Choice:</p>
                         <p className="text-xs">Include A:, B:, C:, D: options</p>
                         <p className="font-medium">✅ True/False:</p>
-                        <p className="text-xs">Use "Correct: True" or "Correct: False"</p>
+                        <p className="text-xs">Use &quot;Correct: True&quot; or &quot;Correct: False&quot;</p>
                         <p className="font-medium">🕳️ Fill in the Gap:</p>
-                        <p className="text-xs">Include "_____" or "fill in the gap" in question</p>
+                        <p className="text-xs">Include &quot;_____&quot; or &quot;fill in the gap&quot; in question</p>
                       </div>
                       <div>
                         <p className="font-medium">✍️ Short Answer:</p>
                         <p className="text-xs">Simple text questions without options</p>
                         <p className="font-medium">📝 Subjective/Essay:</p>
-                        <p className="text-xs">Include "explain", "describe", "discuss" in question</p>
+                        <p className="text-xs">Include &quot;explain&quot;, &quot;describe&quot;, &quot;discuss&quot; in question</p>
                       </div>
                     </div>
                   </div>

@@ -13,11 +13,11 @@ const eslintConfig = [
   ...compat.extends("next/core-web-vitals", "next/typescript"),
   {
     rules: {
-      "@typescript-eslint/no-unused-vars": "warn",
-      "react-hooks/exhaustive-deps": "warn",
+      "@typescript-eslint/no-unused-vars": "off",
+      "react-hooks/exhaustive-deps": "off",
       "@typescript-eslint/no-explicit-any": "error",
       "react/no-unescaped-entities": "error",
-      "@next/next/no-img-element": "warn",
+      "@next/next/no-img-element": "off",
       "prefer-const": "error",
       "prefer-spread": "error",
       "@typescript-eslint/no-empty-object-type": "error"

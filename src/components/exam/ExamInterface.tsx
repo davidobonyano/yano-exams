@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
-import { Exam, Question, UserExamAttempt, UserAnswer } from '@/types/database'
+import { Exam, Question, UserExamAttempt } from '@/types/database'
 import { CheckCircle } from 'lucide-react'
 import PersistentExamTimer from './PersistentExamTimer'
 import QuestionDisplay from './QuestionDisplay'
@@ -38,7 +38,6 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
   const [loadingUpcoming, setLoadingUpcoming] = useState(true)
   const [examStarted, setExamStarted] = useState(false)
   
-  // Step-based modal flow
   const [step, setStep] = useState<'none' | 'confirm' | 'submitting' | 'success'>('none')
 
   const warningShown = useRef(false)
@@ -47,7 +46,6 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
   const copyAttempts = useRef(0)
   const saveTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
-  // Anti-cheating: Monitor tab visibility
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.hidden && examStarted && attempt?.status === 'in_progress') {
@@ -56,7 +54,6 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
           count: tabSwitchCount.current,
           timestamp: new Date().toISOString()
         })
-        
         if (tabSwitchCount.current >= 3) {
           setWarnings(prev => [...prev, 'Multiple tab switches detected. This may result in exam termination.'])
         } else {
@@ -69,7 +66,6 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [examStarted, attempt])
 
-  // Anti-cheating: Disable right-click and copy/paste
   useEffect(() => {
     const handleContextMenu = (e: MouseEvent) => {
       if (examStarted) {
@@ -85,7 +81,6 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (examStarted) {
-        // Disable common copy/paste shortcuts
         if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'x', 'a', 's'].includes(e.key.toLowerCase())) {
           e.preventDefault()
           copyAttempts.current += 1
@@ -96,8 +91,6 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
           })
           setWarnings(prev => [...prev, 'Copy/paste operations are disabled during the exam.'])
         }
-        
-        // Disable F12, F5, Ctrl+Shift+I, etc.
         if (e.key === 'F12' || e.key === 'F5' || 
             (e.ctrlKey && e.shiftKey && ['I', 'J', 'C'].includes(e.key)) ||
             (e.ctrlKey && e.key === 'U')) {
@@ -120,7 +113,6 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
     }
   }, [examStarted])
 
-  // Monitor network connectivity
   useEffect(() => {
     const handleOnline = () => setIsOnline(true)
     const handleOffline = () => setIsOnline(false)
@@ -134,68 +126,40 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
     }
   }, [])
 
-  const logCheatingAttempt = async (violationType: string, details: Record<string, unknown>) => {
+  const logCheatingAttempt = useCallback(async (violationType: string, details: Record<string, unknown>) => {
     if (!attempt) return
-
     try {
       await supabase
         .from('cheating_logs')
-        .insert([{
-          attempt_id: attempt.id,
-          user_id: profile!.id,
-          violation_type: violationType,
-          violation_details: details
-        }])
+        .insert([{ attempt_id: attempt.id, user_id: profile!.id, violation_type: violationType, violation_details: details }])
     } catch (error) {
       console.error('Error logging cheating attempt:', error)
     }
-  }
+  }, [attempt, profile])
 
-  useEffect(() => {
-    if (profile) {
-      initializeExam()
-    }
-  }, [profile, examId])
-
-  // Load upcoming exams when profile is available and showing instructions
-  useEffect(() => {
-    if (profile?.class_level && showInstructions) {
-      loadUpcomingExams()
-    }
-  }, [profile?.class_level, showInstructions])
-
-  const initializeExam = async () => {
+  const initializeExam = useCallback(async () => {
+    if (!profile) return
     try {
       setLoading(true)
-
-      // Fetch exam details
       const { data: examData, error: examError } = await supabase
         .from('exams')
         .select('*')
         .eq('id', examId)
         .single()
-
       if (examError) throw examError
-      
-      // Check if user's class matches exam class
-      if (examData.class_level !== profile!.class_level) {
+      if (examData.class_level !== profile.class_level) {
         throw new Error('You are not authorized to take this exam')
       }
-
       setExam(examData)
-
-      // Check for existing attempt
       const { data: attemptData, error: attemptError } = await supabase
         .from('user_exam_attempts')
         .select('*')
-        .eq('user_id', profile!.id)
+        .eq('user_id', profile.id)
         .eq('exam_id', examId)
         .single()
-
       if (attemptError && attemptError.code !== 'PGRST116') {
         throw attemptError
       }
-
       if (attemptData) {
         if (attemptData.status === 'submitted' || attemptData.status === 'completed') {
           router.push(`/results/${attemptData.id}`)
@@ -205,47 +169,52 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
         setExamStarted(true)
         setShowInstructions(false)
       }
-
-      // Fetch questions
       const { data: questionsData, error: questionsError } = await supabase
         .from('questions')
         .select('*')
         .eq('exam_id', examId)
         .order('created_at')
-
       if (questionsError) throw questionsError
 
-      // Deterministic shuffle per student, stable across reloads
-      const shuffledQuestions = shuffleQuestionsForStudent(questionsData as any, profile!.id, examId)
-      setQuestions(shuffledQuestions as any)
+      // Normalize options to undefined to satisfy type, and keep full Question objects
+      const baseQuestions = (questionsData as unknown as Question[]).map(q => ({
+        ...q,
+        options: q.options ?? undefined,
+      }))
+      // Shuffle order deterministically using helper, but preserve full objects
+      const shuffledIds = shuffleQuestionsForStudent(baseQuestions, profile.id, examId).map(q => q.id)
+      const idToQuestion = new Map(baseQuestions.map(q => [q.id, q]))
+      const shuffledQuestions = shuffledIds.map(id => idToQuestion.get(id)!).filter(Boolean) as Question[]
+      setQuestions(shuffledQuestions)
 
-      // Load existing answers if resuming
       if (attemptData && attemptData.status === 'in_progress') {
         const { data: answersData, error: answersError } = await supabase
           .from('user_answers')
           .select('*')
           .eq('attempt_id', attemptData.id)
-
         if (answersError) throw answersError
-
         const answersMap: Record<string, string> = {}
         answersData.forEach(answer => {
           answersMap[answer.question_id] = answer.answer
         })
         setAnswers(answersMap)
       }
-
     } catch (err: unknown) {
       console.error('Error initializing exam:', err)
       setError(err instanceof Error ? err.message : 'Failed to load exam')
     } finally {
       setLoading(false)
     }
-  }
+  }, [profile, examId, router])
 
-  const loadUpcomingExams = async () => {
+  useEffect(() => {
+    if (profile) {
+      initializeExam()
+    }
+  }, [profile, examId, initializeExam])
+
+  const loadUpcomingExams = useCallback(async () => {
     if (!profile?.class_level) return
-    
     try {
       const now = new Date().toISOString()
       const { data, error } = await supabase
@@ -265,47 +234,60 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
         .gte('ends_at', now)
         .order('starts_at', { ascending: true })
         .limit(5)
-
       if (error) throw error
-
       const formattedExams = (data || []).map(exam => ({
         title: exam.exam.title,
-        date: new Date(exam.starts_at).toLocaleDateString('en-US', { 
-          weekday: 'short', 
-          month: 'short', 
-          day: 'numeric',
-          hour: '2-digit',
-          minute: '2-digit'
-        }),
+        date: new Date(exam.starts_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
         duration: exam.exam.duration_minutes
       }))
-      
       setUpcomingExams(formattedExams)
     } catch (error) {
       console.error('Error loading upcoming exams:', error)
     } finally {
       setLoadingUpcoming(false)
     }
-  }
+  }, [profile?.class_level])
 
-  const startExam = async () => {
+  useEffect(() => {
+    if (profile?.class_level && showInstructions) {
+      loadUpcomingExams()
+    }
+  }, [profile?.class_level, showInstructions, loadUpcomingExams])
+
+  const saveAnswerToDatabase = useCallback(async (questionId: string, answer: string) => {
+    if (!attempt) return
+    try {
+      setSavingAnswer(true)
+      const { error } = await supabase
+        .from('user_answers')
+        .upsert([{ attempt_id: attempt.id, question_id: questionId, answer }], { onConflict: 'attempt_id,question_id' })
+      if (error) throw error
+    } catch (err) {
+      console.error('Error saving answer:', err)
+    } finally {
+      setSavingAnswer(false)
+    }
+  }, [attempt])
+
+  const saveAnswer = useCallback((questionId: string, answer: string) => {
+    setAnswers(prev => ({ ...prev, [questionId]: answer }))
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current)
+    }
+    saveTimeoutRef.current = setTimeout(() => {
+      saveAnswerToDatabase(questionId, answer)
+    }, 500)
+  }, [saveAnswerToDatabase])
+
+  async function startExam() {
     if (!exam || !profile) return
-
     try {
       const { data, error } = await supabase
         .from('user_exam_attempts')
-        .insert([{
-          user_id: profile.id,
-          exam_id: exam.id,
-          status: 'in_progress',
-          started_at: new Date().toISOString(),
-          time_remaining: exam.duration_minutes * 60
-        }])
+        .insert([{ user_id: profile.id, exam_id: exam.id, status: 'in_progress', started_at: new Date().toISOString(), time_remaining: exam.duration_minutes * 60 }])
         .select()
         .single()
-
       if (error) throw error
-
       setAttempt(data)
       setExamStarted(true)
       setShowInstructions(false)
@@ -315,87 +297,26 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
     }
   }
 
-  const saveAnswerToDatabase = async (questionId: string, answer: string) => {
-    if (!attempt) return
-
-    try {
-      setSavingAnswer(true)
-      
-      const { error } = await supabase
-        .from('user_answers')
-        .upsert([{
-          attempt_id: attempt.id,
-          question_id: questionId,
-          answer: answer
-        }], {
-          onConflict: 'attempt_id,question_id'
-        })
-
-      if (error) throw error
-    } catch (err) {
-      console.error('Error saving answer:', err)
-    } finally {
-      setSavingAnswer(false)
-    }
-  }
-
-  const saveAnswer = (questionId: string, answer: string) => {
-    // Immediately update local state for responsiveness
-    setAnswers(prev => ({ ...prev, [questionId]: answer }))
-
-    // Clear existing timeout
-    if (saveTimeoutRef.current) {
-      clearTimeout(saveTimeoutRef.current)
-    }
-
-    // Debounce database save by 500ms
-    saveTimeoutRef.current = setTimeout(() => {
-      saveAnswerToDatabase(questionId, answer)
-    }, 500)
-  }
-
-  const submitExam = async () => {
+  const submitExam = useCallback(async () => {
     if (!attempt || !exam) return
-
     try {
-      // Update attempt status
       const { error: updateError } = await supabase
         .from('user_exam_attempts')
-        .update({
-          status: 'submitted',
-          submitted_at: new Date().toISOString(),
-          completed_at: new Date().toISOString()
-        })
+        .update({ status: 'submitted', submitted_at: new Date().toISOString(), completed_at: new Date().toISOString() })
         .eq('id', attempt.id)
-
       if (updateError) throw updateError
-
-      // First validate and mark all answers as correct/incorrect
-      const answersArray = Object.entries(answers).map(([questionId, answer]) => ({
-        questionId,
-        answer
-      }))
-      
-      console.log('Validating answers for attempt:', attempt.id, answersArray)
+      const answersArray = Object.entries(answers).map(([questionId, answer]) => ({ questionId, answer }))
       const validationResult = await validateAndMarkAnswers(attempt.id, answersArray)
       console.log('Answer validation result:', validationResult)
-
-      // Calculate and save the exam score
-      console.log('Calculating exam score for attempt:', attempt.id)
       const scoringResult = await calculateAndSaveScore(attempt.id)
-      
-      if (scoringResult.success) {
-        console.log('Exam score calculated successfully:', scoringResult)
-      } else {
+      if (!scoringResult.success) {
         console.error('Failed to calculate exam score:', scoringResult.error)
       }
-
-      // Do not redirect here; handler manages success step and navigation
     } catch (err: unknown) {
       console.error('Error submitting exam:', err)
       setError(err instanceof Error ? err.message : 'Failed to submit exam')
     }
-  }
+  }, [attempt, exam, answers])
 
   const handleTimeUp = useCallback(async () => {
     if (step === 'submitting' || step === 'success') return
@@ -406,7 +327,7 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
       setStep('none')
       router.push('/dashboard')
     }, 1500)
-  }, [attempt, exam, step, router])
+  }, [submitExam, step, router])
 
   const handleSubmitClick = useCallback(() => {
     if (step === 'submitting' || step === 'success') return
@@ -422,7 +343,7 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
       setStep('none')
       router.push('/dashboard')
     }, 1500)
-  }, [step, router, submitExam])
+  }, [submitExam, step, router])
 
   const handleSubmitCancel = useCallback(() => {
     if (step === 'submitting') return
@@ -476,8 +397,7 @@ export default function ExamInterface({ examId }: ExamInterfaceProps) {
         instructions={exam.description}
         cameraRequired={false}
         onContinueToExam={() => {
-          setShowInstructions(false)
-          setExamStarted(true)
+          // Start exam first; internal function will toggle UI on success
           startExam()
         }}
         onStartDemo={() => {

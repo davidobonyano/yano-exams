@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'react-hot-toast'
 import { ClassLevel } from '@/types/database'
@@ -60,13 +60,7 @@ export default function SimpleStudentManagement({ teacherId, onClose }: SimpleSt
   const [bulkText, setBulkText] = useState('')
   const [stream, setStream] = useState('')
 
-  useEffect(() => {
-    fetchStudents()
-    fetchClassStatistics()
-    fetchNextStudentNumber()
-  }, [teacherId, selectedClass])
-
-  const fetchStudents = async () => {
+  const fetchStudents = useCallback(async () => {
     try {
       setLoading(true)
       const { data, error } = await supabase.rpc('get_all_school_students', {
@@ -81,9 +75,9 @@ export default function SimpleStudentManagement({ teacherId, onClose }: SimpleSt
     } finally {
       setLoading(false)
     }
-  }
+  }, [selectedClass])
 
-  const fetchClassStatistics = async () => {
+  const fetchClassStatistics = useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc('get_school_class_statistics')
       if (error) throw error
@@ -91,9 +85,9 @@ export default function SimpleStudentManagement({ teacherId, onClose }: SimpleSt
     } catch (error) {
       console.error('Error fetching class statistics:', error)
     }
-  }
+  }, [])
 
-  const fetchNextStudentNumber = async () => {
+  const fetchNextStudentNumber = useCallback(async () => {
     try {
       const { data, error } = await supabase.rpc('get_next_student_number')
       if (error) throw error
@@ -101,7 +95,13 @@ export default function SimpleStudentManagement({ teacherId, onClose }: SimpleSt
     } catch (error) {
       console.error('Error fetching next student number:', error)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    fetchStudents()
+    fetchClassStatistics()
+    fetchNextStudentNumber()
+  }, [fetchStudents, fetchClassStatistics, fetchNextStudentNumber])
 
   const resetForm = () => {
     setFullName('')
@@ -129,7 +129,7 @@ export default function SimpleStudentManagement({ teacherId, onClose }: SimpleSt
         p_phone: phone.trim() || null,
         p_parent_name: parentName.trim() || null,
         p_parent_phone: parentPhone.trim() || null,
-        p_stream: ['SS1','SS2','SS3'].includes(classLevel as string) ? (stream.trim() || null) : null
+        p_stream: (['SS1','SS2','SS3'] as ClassLevel[]).includes(classLevel) ? (stream.trim() || null) : null
       })
 
       if (error) throw error
@@ -392,7 +392,7 @@ export default function SimpleStudentManagement({ teacherId, onClose }: SimpleSt
                     <option key={level.value} value={level.value}>{level.label}</option>
                   ))}
                 </select>
-                {(['SS1','SS2','SS3'] as const).includes(classLevel as any) && (
+                {(['SS1','SS2','SS3'] as ClassLevel[]).includes(classLevel) && (
                   <select
                     value={stream}
                     onChange={(e) => setStream(e.target.value)}

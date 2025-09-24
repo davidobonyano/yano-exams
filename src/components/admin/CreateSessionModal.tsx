@@ -7,7 +7,7 @@ import { Exam } from '@/types/database-v2'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { FloatingInput } from '@/components/ui/floating-input'
 import { MagneticButton } from '@/components/ui/magnetic-button'
-import { X, Calendar, Clock, Users, FileText, CheckCircle, Settings, Loader2, AlertTriangle, Award } from 'lucide-react'
+import { X, Calendar, Clock, Users, FileText, CheckCircle, Settings, AlertTriangle, Award } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 interface CreateSessionModalProps {

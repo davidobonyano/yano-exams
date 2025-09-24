@@ -1,11 +1,11 @@
 import SessionExamInterface from '@/components/exam/SessionExamInterface'
 
 interface ExamPageProps {
-  params: Promise<{ id: string }>
+	params: Promise<{ id: string }>
 }
 
 export default async function ExamPage({ params }: ExamPageProps) {
-  const { id } = await params
+	const { id } = await params
 
-  return <SessionExamInterface examId={id} />
+	return <SessionExamInterface examId={id} />
 }

@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { FloatingInput } from '@/components/ui/floating-input'
 import { MagneticButton } from '@/components/ui/magnetic-button'
 import { EnhancedSelect } from '@/components/ui/enhanced-select'
-import { X, BookOpen, Clock, Users, Target, Loader2, AlertTriangle } from 'lucide-react'
+import { X, BookOpen, Clock, Users, Target, AlertTriangle } from 'lucide-react'
 import toast from 'react-hot-toast'
 
 const CLASS_LEVELS: { value: ClassLevel; label: string }[] = [

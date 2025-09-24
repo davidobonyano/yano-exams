@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import { Clock, AlertTriangle, Wifi, WifiOff } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -26,28 +26,7 @@ export default function PersistentExamTimer({
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
   const syncIntervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true)
-      syncTimeWithServer()
-      toast.success('Connection restored')
-    }
-    
-    const handleOffline = () => {
-      setIsOnline(false)
-      toast.error('Connection lost - timer continues running')
-    }
-
-    window.addEventListener('online', handleOnline)
-    window.addEventListener('offline', handleOffline)
-
-    return () => {
-      window.removeEventListener('online', handleOnline)
-      window.removeEventListener('offline', handleOffline)
-    }
-  }, [])
-
-  const syncTimeWithServer = async () => {
+  const syncTimeWithServer = useCallback(async () => {
     try {
       const { data, error } = await supabase
         .from(tableName)
@@ -62,9 +41,7 @@ export default function PersistentExamTimer({
         const now = Date.now()
         const elapsedSeconds = Math.floor((now - serverStartTime) / 1000)
         const serverTimeRemaining = Math.max(0, data.time_remaining - elapsedSeconds)
-        
         setTimeRemaining(serverTimeRemaining)
-        
         localStorage.setItem(`exam_timer_${attemptId}`, JSON.stringify({
           timeRemaining: serverTimeRemaining,
           lastUpdate: now,
@@ -74,11 +51,10 @@ export default function PersistentExamTimer({
     } catch (error) {
       console.error('Failed to sync time with server:', error)
     }
-  }
+  }, [attemptId, tableName])
 
-  const updateServerTime = async (newTimeRemaining: number) => {
+  const updateServerTime = useCallback(async (newTimeRemaining: number) => {
     if (!isOnline) return
-
     try {
       await supabase
         .from(tableName)
@@ -90,63 +66,65 @@ export default function PersistentExamTimer({
     } catch (error) {
       console.error('Failed to update server time:', error)
     }
-  }
+  }, [attemptId, isOnline, tableName])
 
   useEffect(() => {
-    // Don't use localStorage on refresh - let server be the source of truth
+    const handleOnline = () => {
+      setIsOnline(true)
+      syncTimeWithServer()
+      toast.success('Connection restored')
+    }
+    const handleOffline = () => {
+      setIsOnline(false)
+      toast.error('Connection lost - timer continues running')
+    }
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+    return () => {
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
+    }
+  }, [syncTimeWithServer])
+
+  useEffect(() => {
     syncTimeWithServer()
     syncIntervalRef.current = setInterval(syncTimeWithServer, 30000)
-
     return () => {
       if (syncIntervalRef.current) {
         clearInterval(syncIntervalRef.current)
       }
     }
-  }, [attemptId])
+  }, [attemptId, syncTimeWithServer])
 
   useEffect(() => {
     if (timeRemaining <= 0) {
       onTimeUp()
       return
     }
-
     intervalRef.current = setInterval(() => {
       setTimeRemaining((prev) => {
         const newTime = Math.max(0, prev - 1)
-        
         localStorage.setItem(`exam_timer_${attemptId}`, JSON.stringify({
           timeRemaining: newTime,
           lastUpdate: Date.now()
         }))
-
-        if (onTimeUpdate) {
-          onTimeUpdate(newTime)
-        }
-
-        if (newTime % 10 === 0 && isOnline) {
-          updateServerTime(newTime)
-        }
-
-        if (newTime <= 0) {
-          onTimeUp()
-        }
-
+        if (onTimeUpdate) onTimeUpdate(newTime)
+        if (newTime % 10 === 0 && isOnline) updateServerTime(newTime)
+        if (newTime <= 0) onTimeUp()
         return newTime
       })
     }, 1000)
-
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
       }
     }
-  }, [timeRemaining, onTimeUp, onTimeUpdate, attemptId, isOnline])
+  }, [timeRemaining, onTimeUp, onTimeUpdate, attemptId, isOnline, updateServerTime])
 
   const formatTime = (seconds: number) => {
     const hours = Math.floor(seconds / 3600)
     const minutes = Math.floor((seconds % 3600) / 60)
     const secs = seconds % 60
-
     if (hours > 0) {
       return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
     }
@@ -156,7 +134,6 @@ export default function PersistentExamTimer({
   const getTimerColor = () => {
     const totalTime = initialTimeRemaining
     const percentage = (timeRemaining / totalTime) * 100
-
     if (percentage > 50) return 'text-green-600'
     if (percentage > 25) return 'text-yellow-600'
     if (percentage > 10) return 'text-orange-600'
@@ -166,7 +143,6 @@ export default function PersistentExamTimer({
   const getBackgroundColor = () => {
     const totalTime = initialTimeRemaining
     const percentage = (timeRemaining / totalTime) * 100
-
     if (percentage > 50) return 'bg-green-50 border-green-200'
     if (percentage > 25) return 'bg-yellow-50 border-yellow-200'
     if (percentage > 10) return 'bg-orange-50 border-orange-200'
@@ -191,40 +167,23 @@ export default function PersistentExamTimer({
               {isOnline ? 'Online' : 'Offline'}
             </span>
           </div>
-
           <div className="flex items-center space-x-2">
             <Clock className={`w-5 h-5 ${getTimerColor()}`} />
-            <span className={`text-xl font-mono font-bold ${getTimerColor()}`}>
-              {formatTime(timeRemaining)}
-            </span>
+            <span className={`text-xl font-mono font-bold ${getTimerColor()}`}> {formatTime(timeRemaining)} </span>
           </div>
-
           {timeRemaining <= 300 && (
-            <motion.div
-              animate={{ scale: [1, 1.1, 1] }}
-              transition={{ duration: 1, repeat: Infinity }}
-            >
+            <motion.div animate={{ scale: [1, 1.1, 1] }} transition={{ duration: 1, repeat: Infinity }}>
               <AlertTriangle className="w-5 h-5 text-red-500" />
             </motion.div>
           )}
         </div>
-
         {timeRemaining <= 60 && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mt-2 text-xs text-red-600 font-medium"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-xs text-red-600 font-medium">
             ⚠️ Less than 1 minute remaining!
           </motion.div>
         )}
-
         {!isOnline && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="mt-2 text-xs text-orange-600"
-          >
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mt-2 text-xs text-orange-600">
             Timer continues offline
           </motion.div>
         )}

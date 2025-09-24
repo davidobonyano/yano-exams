@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { ExamSession } from '@/types/database-v2'
@@ -9,21 +9,17 @@ import { TeacherWebRTCNew } from '@/lib/webrtc-streaming'
 import { CameraFrameReceiver } from '@/lib/camera-streaming'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MagneticButton } from '@/components/ui/magnetic-button'
-import { VideoStream } from '@/components/ui/video-stream'
 import TeacherVideoDisplay from './TeacherVideoDisplay'
-import StudentFrameDisplay from './StudentFrameDisplay'
 import TeacherStudentModal from './TeacherStudentModal'
 import SendWarningModal from './SendWarningModal'
+import Image from 'next/image'
 import { 
   X, 
   Camera, 
-  CameraOff, 
   Users, 
   Eye,
   AlertTriangle,
-  CheckCircle,
   Monitor,
-  Maximize2,
   Volume2,
   VolumeX,
   AlertTriangle as WarningIcon
@@ -56,53 +52,70 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
   const webrtcStreamingRef = useRef<TeacherWebRTCNew | null>(null)
   const frameReceiverRef = useRef<CameraFrameReceiver | null>(null)
   const [studentFrames, setStudentFrames] = useState<Map<string, string>>(new Map())
-  const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map())
-
-  const setupWebRTCStreaming = async () => {
+ 
+  const setupWebRTCStreaming = useCallback(async () => {
     try {
       console.log('🚀 Initializing new WebRTC streaming system...')
-      
       const webrtcStreaming = new TeacherWebRTCNew(session.id, session.teacher_id)
-      
-      // Handle incoming student streams
       webrtcStreaming.onStudentStreamReceived = (studentId: string, stream: MediaStream) => {
-        console.log('🎥 TEACHER: Received WebRTC stream from student:', studentId)
-        console.log('Stream tracks:', {
-          video: stream.getVideoTracks().length,
-          audio: stream.getAudioTracks().length
-        })
-        
-        // Update student list with the new stream
         setStudents(prev => prev.map(student => 
           student.student_id === studentId 
             ? { ...student, stream }
             : student
         ))
       }
-      
-      // Handle connection state changes
       webrtcStreaming.onConnectionStateChange = (studentId: string, state: string) => {
         console.log(`📡 Student ${studentId} WebRTC state:`, state)
-        if (state === 'connected') {
-          console.log(`✅ Live video/audio established with student ${studentId}`)
-        }
       }
-      
       webrtcStreamingRef.current = webrtcStreaming
       console.log('✅ New WebRTC streaming system initialized')
     } catch (error) {
       console.error('❌ WebRTC streaming initialization failed:', error)
     }
-  }
+  }, [session.id, session.teacher_id])
+
+  const fetchStudentFeeds = useCallback(async () => {
+    try {
+      setLoading(true)
+      const { data: studentsData, error } = await supabase
+        .from('student_exam_attempts')
+        .select(`
+          *,
+          students!inner(
+            student_id,
+            full_name
+          )
+        `)
+        .eq('session_id', session.id)
+        .in('status', ['in_progress', 'not_started'])
+
+      if (error) throw error
+
+      const studentFeeds: StudentCameraFeed[] = studentsData?.map(student => ({
+        id: student.id,
+        student_id: student.student_id,
+        student_name_id: student.students.student_id,
+        full_name: student.students.full_name,
+        camera_enabled: student.camera_enabled || false,
+        last_seen: student.last_activity_at || student.updated_at,
+        violations: []
+      })) || []
+
+      setStudents(studentFeeds)
+
+    } catch (error) {
+      console.error('Error fetching student camera feeds:', error)
+    } finally {
+      setLoading(false)
+    }
+  }, [session.id])
 
   useEffect(() => {
     fetchStudentFeeds()
-    // Initialize both systems; UI toggle will decide what to show
-    // initializeWebRTC()
     setupWebRTCStreaming()
+
     const frameReceiver = new CameraFrameReceiver(session.id)
     frameReceiver.startReceiving((studentId, frameData) => {
-      console.log('📸 Teacher received frame from student:', studentId)
       setStudentFrames(prev => {
         const next = new Map(prev)
         next.set(studentId, frameData)
@@ -111,7 +124,6 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
     })
     frameReceiverRef.current = frameReceiver
     
-    // Set up real-time subscription for camera status updates
     const subscription = supabase
       .channel(`camera_monitoring_${session.id}`)
       .on(
@@ -128,130 +140,16 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
       )
       .subscribe()
 
-    // OLD: Initialize frame receiver for video streaming - DISABLED for WebRTC
-    // const frameReceiver = new CameraFrameReceiver(session.id)
-    // frameReceiver.startReceiving((studentId, frameData) => {
-    //   console.log('📸 Teacher received frame from student:', studentId)
-    //   console.log('📊 Current student frames map keys:', Array.from(studentFrames.keys()))
-    //   setStudentFrames(prev => new Map(prev.set(studentId, frameData)))
-    // })
-    // frameReceiverRef.current = frameReceiver
-
     return () => {
       subscription.unsubscribe()
-      if (webrtcRef.current) {
-        webrtcRef.current.destroy()
-      }
-      if (webrtcStreamingRef.current) {
-        webrtcStreamingRef.current.destroy()
-      }
-      if (frameReceiverRef.current) {
-        frameReceiverRef.current.stopReceiving()
-      }
+      const webrtc = webrtcRef.current
+      const webrtcStreaming = webrtcStreamingRef.current
+      const frameReceiverLocal = frameReceiverRef.current
+      if (webrtc) webrtc.destroy()
+      if (webrtcStreaming) webrtcStreaming.destroy()
+      if (frameReceiverLocal) frameReceiverLocal.stopReceiving()
     }
-  }, [session.id])
-
-  const initializeWebRTC = async () => {
-    try {
-      // Always try to initialize WebRTC for live video capability
-      console.log('Initializing WebRTC for live video streaming...')
-      
-      // Get current teacher ID from session or auth
-      const teacherId = session.teacher_id
-      
-      const webrtc = new TeacherWebRTC(session.id, teacherId)
-      
-      // Handle incoming student streams
-      webrtc.onStudentStreamReceived = (studentId: string, stream: MediaStream) => {
-        console.log('🎥 RECEIVED STREAM from student:', studentId)
-        console.log('Stream details:', {
-          id: stream.id,
-          active: stream.active,
-          videoTracks: stream.getVideoTracks().length,
-          audioTracks: stream.getAudioTracks().length
-        })
-        
-        // Check stream tracks
-        stream.getVideoTracks().forEach((track, index) => {
-          console.log(`Video track ${index}:`, {
-            enabled: track.enabled,
-            readyState: track.readyState,
-            settings: track.getSettings()
-          })
-        })
-        
-        // Update student list with stream
-        setStudents(prev => {
-          const updated = prev.map(student => 
-            student.student_id === studentId 
-              ? { ...student, stream }
-              : student
-          )
-          console.log('Updated students with stream:', updated.find(s => s.student_id === studentId))
-          return updated
-        })
-      }
-      
-      // Handle connection status
-      (webrtc as TeacherWebRTC & { onConnectionStateChange?: (studentId: string, state: string) => void }).onConnectionStateChange = (studentId: string, state: string) => {
-        console.log(`Student ${studentId} connection state:`, state)
-        if (state === 'connected') {
-          console.log(`Live video established with student ${studentId}`)
-        }
-      }
-      
-      webrtcRef.current = webrtc
-      console.log('WebRTC initialized successfully - live video streaming enabled')
-    } catch (error) {
-      console.error('WebRTC initialization failed:', error)
-      console.log('Continuing with camera status monitoring only')
-    }
-  }
-
-  const fetchStudentFeeds = async () => {
-    try {
-      setLoading(true)
-
-      // Fetch students who have joined this session
-      const { data: studentsData, error } = await supabase
-        .from('student_exam_attempts')
-        .select(`
-          *,
-          students!inner(
-            student_id,
-            full_name
-          )
-        `)
-        .eq('session_id', session.id)
-        .in('status', ['in_progress', 'not_started'])
-
-      if (error) throw error
-
-      console.log('Camera monitor students data:', studentsData)
-      console.log('📊 Students mapping:', studentsData?.map(s => ({
-        attempt_student_id: s.student_id,
-        db_student_id: s.students.student_id,
-        name: s.students.full_name
-      })))
-
-      const studentFeeds: StudentCameraFeed[] = studentsData?.map(student => ({
-        id: student.id,
-        student_id: student.student_id, // Use the actual student_id from student_exam_attempts
-        student_name_id: student.students.student_id, // Keep the display name ID separate
-        full_name: student.students.full_name,
-        camera_enabled: student.camera_enabled || false,
-        last_seen: student.last_activity_at || student.updated_at,
-        violations: []
-      })) || []
-
-      setStudents(studentFeeds)
-
-    } catch (error) {
-      console.error('Error fetching student camera feeds:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  }, [session.id, fetchStudentFeeds, setupWebRTCStreaming])
 
   const toggleFullscreen = (studentId: string) => {
     setSelectedStudent(selectedStudent === studentId ? null : studentId)
@@ -430,7 +328,7 @@ export default function CameraMonitor({ session, onClose }: CameraMonitorProps) 
                             )
                           ) : (
                             studentFrames.get(student.student_id) ? (
-                              <img src={studentFrames.get(student.student_id)} alt={`${student.full_name} frame`} className="w-full h-48 object-cover rounded-lg" />
+                              <Image src={studentFrames.get(student.student_id)!} alt={`${student.full_name} frame`} width={640} height={360} className="w-full h-48 object-cover rounded-lg" />
                             ) : (
                               <div className="w-full h-48 bg-gray-100 rounded-lg flex items-center justify-center">
                                 <div className="text-center">

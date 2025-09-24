@@ -1,6 +1,7 @@
 'use client'
 
 import { Question } from '@/types/database-v2'
+import Image from 'next/image'
 
 interface QuestionDisplayProps {
   question: Question
@@ -38,9 +39,7 @@ export default function QuestionDisplay({ question, answer, onAnswerChange }: Qu
   }
 
   const renderTrueFalse = () => {
-    // Check if question has options (A: True, B: False format) or is direct true/false
     if (question.options && Object.keys(question.options).length > 0) {
-      // Format: A: True, B: False
       return (
         <div className="space-y-3">
           {Object.entries(question.options).map(([key, value]) => (
@@ -59,7 +58,6 @@ export default function QuestionDisplay({ question, answer, onAnswerChange }: Qu
         </div>
       )
     } else {
-      // Direct true/false format
       return (
         <div className="space-y-3">
           <label className="flex items-center space-x-3 p-3 rounded-lg border border-gray-200 hover:bg-gray-50 cursor-pointer">
@@ -154,7 +152,6 @@ export default function QuestionDisplay({ question, answer, onAnswerChange }: Qu
 
   return (
     <div className="space-y-6">
-      {/* Question */}
       <div>
         <div className="flex items-start justify-between mb-4">
           <h2 className="text-lg font-medium text-gray-900 leading-relaxed">
@@ -166,20 +163,18 @@ export default function QuestionDisplay({ question, answer, onAnswerChange }: Qu
             </span>
           </div>
         </div>
-        
-        {/* Integrated Visual Content */}
         {question.image_data && (
           <div className="mb-4 p-3 bg-gray-50 rounded-lg border">
-            <img
+            <Image
               src={question.image_data}
               alt="Question visual content"
-              className="max-w-full max-h-80 rounded object-contain mx-auto"
+              width={800}
+              height={600}
+              className="max-w-full h-auto max-h-80 rounded object-contain mx-auto"
             />
           </div>
         )}
       </div>
-
-      {/* Answer Section */}
       <div>
         <h3 className="text-sm font-medium text-gray-700 mb-3">
           {question.question_type === 'multiple_choice' && 'Select one answer:'}
@@ -188,8 +183,6 @@ export default function QuestionDisplay({ question, answer, onAnswerChange }: Qu
         </h3>
         {renderAnswerSection()}
       </div>
-
-      {/* Answer Status */}
       <div className="flex items-center justify-between text-sm">
         <div className="flex items-center space-x-2">
           {answer ? (
@@ -204,7 +197,6 @@ export default function QuestionDisplay({ question, answer, onAnswerChange }: Qu
             </>
           )}
         </div>
-        
         <div className="text-gray-500">
           Question type: {question.question_type.replace('_', ' ')}
         </div>

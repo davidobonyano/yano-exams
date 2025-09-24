@@ -1,13 +1,5 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { signalingChannelFor } from "@/utils/signaling";
-
-const rtcConfig: RTCConfiguration = {
-  iceServers: [
-    { urls: "stun:stun.l.google.com:19302" },
-    // { urls: "turn:YOUR_TURN_HOST", username: "...", credential: "..." },
-  ],
-};
 
 export default function TeacherStudentModal({
   studentId,
@@ -22,9 +14,7 @@ export default function TeacherStudentModal({
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
-  const channelRef = useRef<any>(null);
   const [status, setStatus] = useState("Idle");
-  const [isConnecting, setIsConnecting] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -34,7 +24,6 @@ export default function TeacherStudentModal({
 
     return () => {
       setStatus("Idle");
-      setIsConnecting(false);
     };
   }, [open]);
 

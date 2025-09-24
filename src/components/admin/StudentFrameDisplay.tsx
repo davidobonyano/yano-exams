@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { Camera, CameraOff, Wifi, WifiOff } from 'lucide-react'
+import Image from 'next/image'
+import { Camera, Wifi, WifiOff } from 'lucide-react'
 
 interface StudentFrameDisplayProps {
   studentId: string
@@ -75,10 +76,13 @@ export default function StudentFrameDisplay({ studentId, studentName, frameData,
       {currentFrame ? (
         <>
           {/* Display the captured frame */}
-          <img 
+          <Image 
             src={currentFrame} 
-            alt={`${studentName} camera feed`}
-            className="w-full h-full object-cover"
+            alt={`${studentName} camera feed`} 
+            fill 
+            className="object-cover"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+            unoptimized
           />
           
           {/* Connection status overlay */}

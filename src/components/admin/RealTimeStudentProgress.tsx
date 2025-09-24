@@ -18,7 +18,7 @@ import {
   School,
   Target
 } from 'lucide-react'
-import { ExamSession } from '@/types/database-v2'
+import { ExamSession, Student } from '@/types/database-v2'
 import toast from 'react-hot-toast'
 
 interface StudentProgress {
@@ -82,6 +82,30 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
 
       if (teacherStudentsError) throw teacherStudentsError
 
+      // Fallback: include any students in the main `students` table for this class level
+      // This ensures Total counts all class students whether or not they were added to school_students
+      const { data: fallbackClassStudents, error: fallbackError } = await supabase
+        .from('students')
+        .select('*')
+        .eq('class_level', session.class_level)
+
+      if (fallbackError) {
+        console.warn('Fallback students fetch error (non-critical):', fallbackError)
+      }
+
+      // Merge teacher-specific students with class-level students (dedupe by student_id)
+      type RosterStudent = Pick<Student, 'id' | 'student_id' | 'full_name' | 'class_level'>
+      const mergedRosterMap = new Map<string, RosterStudent>()
+      allTeacherStudents?.forEach(s => {
+        mergedRosterMap.set(s.student_id, s)
+      })
+      fallbackClassStudents?.forEach(s => {
+        if (!mergedRosterMap.has(s.student_id)) {
+          mergedRosterMap.set(s.student_id, s)
+        }
+      })
+      const fullClassRoster = Array.from(mergedRosterMap.values())
+
       // Get exam details to get the total number of questions for this session
       const { data: examData, error: examError } = await supabase
         .from('exams')
@@ -138,10 +162,29 @@ export default function RealTimeStudentProgress({ session, onClose }: RealTimeSt
       if (participantError) throw participantError
 
       // Create a map to build the complete student list
-      const progressMap = new Map()
+      type ProgressEntry = {
+        id: string
+        student_id: string
+        full_name: string
+        class_level: string
+        status: 'not_started' | 'in_progress' | 'completed' | 'submitted'
+        started_at?: string
+        completed_at?: string
+        time_remaining?: number
+        current_question_index?: number
+        total_questions: number
+        score?: number
+        percentage_score?: number
+        passed?: boolean
+        warning_count?: number
+        is_flagged?: boolean
+        last_activity_at?: string
+        joined_session: boolean
+      }
+      const progressMap = new Map<string, ProgressEntry>()
 
-      // First, pre-populate with ALL teacher's students for this class
-      allTeacherStudents?.forEach(teacherStudent => {
+      // Pre-populate with the FULL CLASS ROSTER (union of school_students and students tables)
+      fullClassRoster.forEach(teacherStudent => {
         progressMap.set(teacherStudent.student_id, {
           id: teacherStudent.id,
           student_id: teacherStudent.student_id,

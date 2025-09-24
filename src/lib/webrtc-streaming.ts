@@ -1,12 +1,15 @@
 'use client'
 
 import { supabase } from './supabase'
+import type { RealtimeChannel } from '@supabase/supabase-js'
+
+type SignalData = RTCSessionDescriptionInit | RTCIceCandidateInit | null
 
 interface SignalingMessage {
   type: 'offer' | 'answer' | 'ice-candidate' | 'call-request'
   from: string
   to: string
-  data: any
+  data: SignalData
   timestamp: string
 }
 
@@ -15,7 +18,7 @@ export class StudentWebRTC {
   public localStream: MediaStream | null = null
   private sessionId: string
   private studentId: string
-  private signalChannel: any
+  private signalChannel: RealtimeChannel
 
   constructor(sessionId: string, studentId: string) {
     this.sessionId = sessionId
@@ -23,6 +26,9 @@ export class StudentWebRTC {
     
     // Create peer connection with default config (WebRTC disabled in app paths)
     this.peerConnection = new RTCPeerConnection({ iceServers: [] })
+
+    // Initialize signaling
+    this.signalChannel = supabase.channel(`webrtc_${this.sessionId}`)
 
     // WebRTC disabled
   }
@@ -62,10 +68,10 @@ export class StudentWebRTC {
               await this.handleCallRequest()
               break
             case 'answer':
-              await this.handleAnswer(message.data)
+              await this.handleAnswer(message.data as RTCSessionDescriptionInit)
               break
             case 'ice-candidate':
-              await this.handleIceCandidate(message.data)
+              await this.handleIceCandidate(message.data as RTCIceCandidateInit)
               break
           }
         }
@@ -165,13 +171,14 @@ export class TeacherWebRTCNew {
   private peerConnections: Map<string, RTCPeerConnection> = new Map()
   private sessionId: string
   private teacherId: string
-  private signalChannel: any
+  private signalChannel: RealtimeChannel
   public onStudentStreamReceived?: (studentId: string, stream: MediaStream) => void
   public onConnectionStateChange?: (studentId: string, state: string) => void
 
   constructor(sessionId: string, teacherId: string) {
     this.sessionId = sessionId
     this.teacherId = teacherId
+    this.signalChannel = supabase.channel(`webrtc_${this.sessionId}`)
     this.setupSignaling()
   }
 
@@ -187,10 +194,10 @@ export class TeacherWebRTCNew {
           
           switch (message.type) {
             case 'offer':
-              await this.handleOffer(message.from, message.data)
+              await this.handleOffer(message.from, message.data as RTCSessionDescriptionInit)
               break
             case 'ice-candidate':
-              await this.handleIceCandidate(message.from, message.data)
+              await this.handleIceCandidate(message.from, message.data as RTCIceCandidateInit)
               break
           }
         }

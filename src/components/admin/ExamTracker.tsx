@@ -1,29 +1,22 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
-import { motion, AnimatePresence } from 'framer-motion'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { motion } from 'framer-motion'
 import { supabase } from '@/lib/supabase'
 import { ExamSession } from '@/types/database-v2'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { 
   Play, 
-  Pause, 
   Users,
-  Clock, 
   CheckCircle, 
   AlertTriangle, 
-  Eye, 
   X,
   Activity,
-  BarChart3,
-  Zap,
   Timer,
-  Trophy,
   Shield,
   User,
   Hash,
   School,
-  MessageCircle,
   RefreshCw
 } from 'lucide-react'
 import SendWarningModal from './SendWarningModal'
@@ -88,21 +81,7 @@ export default function ExamTracker({ session, onClose }: ExamTrackerProps) {
   const [selectedAttemptForWarning, setSelectedAttemptForWarning] = useState<StudentAttempt | null>(null)
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
-  useEffect(() => {
-    fetchData()
-    
-    if (autoRefresh) {
-      intervalRef.current = setInterval(fetchData, 5000) // Refresh every 5 seconds
-    }
-
-    return () => {
-      if (intervalRef.current) {
-        clearInterval(intervalRef.current)
-      }
-    }
-  }, [session.id, autoRefresh])
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       // Fetch student attempts with student details
       const { data: attemptsData, error: attemptsError } = await supabase
@@ -172,7 +151,21 @@ export default function ExamTracker({ session, onClose }: ExamTrackerProps) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [session.id, loading])
+
+  useEffect(() => {
+    fetchData()
+    
+    if (autoRefresh) {
+      intervalRef.current = setInterval(fetchData, 5000) // Refresh every 5 seconds
+    }
+
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+      }
+    }
+  }, [session.id, autoRefresh, fetchData])
 
   const handleStudentAction = async (attemptId: string, action: 'warn' | 'flag' | 'unflag') => {
     if (action === 'warn') {

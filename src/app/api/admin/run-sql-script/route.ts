@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
+interface QuestionRow {
+  id: string
+  question_type: string
+  question_text: string
+}
+
 export async function POST(request: NextRequest) {
   try {
     // Get the authorization header
@@ -32,17 +38,23 @@ export async function POST(request: NextRequest) {
     }
 
     // Check current database state
-    let status = {
+    const status: {
+      fill_in_gap_available: boolean
+      subjective_available: boolean
+      existing_questions: QuestionRow[]
+      recommendations: string[]
+      database_status: 'checking' | 'fully_updated' | 'partially_updated' | 'needs_update'
+    } = {
       fill_in_gap_available: false,
       subjective_available: false,
-      existing_questions: [] as any[],
-      recommendations: [] as string[],
+      existing_questions: [],
+      recommendations: [],
       database_status: 'checking'
     }
 
     try {
       // Check if fill_in_gap type is available by trying to query it
-      const { data: fillInGapTest, error: fillInGapError } = await supabase
+      const { error: fillInGapError } = await supabase
         .from('questions')
         .select('question_type')
         .eq('question_type', 'fill_in_gap')
@@ -64,7 +76,7 @@ export async function POST(request: NextRequest) {
 
     try {
       // Check if subjective type is available by trying to query it
-      const { data: subjectiveTest, error: subjectiveError } = await supabase
+      const { error: subjectiveError } = await supabase
         .from('questions')
         .select('question_type')
         .eq('question_type', 'subjective')
@@ -93,7 +105,7 @@ export async function POST(request: NextRequest) {
         .limit(10)
       
       if (!existingError && existingQuestions) {
-        status.existing_questions = existingQuestions
+        status.existing_questions = existingQuestions as QuestionRow[]
         console.log('Found existing questions with new types:', existingQuestions.length)
       }
     } catch (e) {

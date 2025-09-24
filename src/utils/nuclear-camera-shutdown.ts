@@ -6,22 +6,21 @@ export function nuclearCameraShutdown() {
     // 1. Find and destroy ALL video elements on the page
     const allVideos = document.querySelectorAll('video');
     allVideos.forEach((video, index) => {
-      console.log(`💥 Destroying video element ${index}:`, video.src || 'stream');
+      console.log(`💥 Destroying video element ${index}:`, (video as HTMLVideoElement).src || 'stream');
       
-      if (video.srcObject) {
-        const stream = video.srcObject as MediaStream;
+      if ((video as HTMLVideoElement).srcObject) {
+        const stream = (video as HTMLVideoElement).srcObject as MediaStream;
         stream.getTracks().forEach(track => {
           track.stop();
           console.log('💥 NUCLEAR: Killed track:', track.kind, track.label);
         });
-        video.srcObject = null;
+        (video as HTMLVideoElement).srcObject = null;
       }
       
-      video.src = '';
-      video.pause();
-      video.load();
+      (video as HTMLVideoElement).src = '';
+      (video as HTMLVideoElement).pause();
+      (video as HTMLVideoElement).load();
       
-      // Remove from DOM completely
       if (video.parentNode) {
         video.parentNode.removeChild(video);
         console.log('💥 NUCLEAR: Removed video element from DOM');
@@ -30,27 +29,27 @@ export function nuclearCameraShutdown() {
     
     // 2. Clear any getUserMedia streams that might still be active
     try {
-      // Force clear any remaining media streams by requesting empty stream
       navigator.mediaDevices.getUserMedia({ video: false, audio: false }).catch(() => {
         console.log('💥 NUCLEAR: Permission reset attempted');
       });
-    } catch (e) {
+    } catch {
       // Expected to fail, but forces browser to reconsider permissions
     }
     
     // 3. Try to clear any global media stream references
-    const streamVars = ['localStream', 'cameraStream', 'mediaStream', 'videoStream'];
+    const streamVars = ['localStream', 'cameraStream', 'mediaStream', 'videoStream'] as const;
     streamVars.forEach(varName => {
       try {
-        const stream = (window as any)[varName];
+        const win = window as unknown as Record<string, unknown>;
+        const stream = win[varName] as unknown as MediaStream | undefined;
         if (stream && typeof stream.getTracks === 'function') {
           stream.getTracks().forEach((track: MediaStreamTrack) => {
             track.stop();
             console.log(`💥 NUCLEAR: Stopped global ${varName} track:`, track.kind);
           });
-          (window as any)[varName] = null;
+          (win as Record<string, unknown>)[varName] = null as unknown as undefined;
         }
-      } catch (e) {
+      } catch {
         // Ignore errors for global vars that don't exist
       }
     });
@@ -59,7 +58,6 @@ export function nuclearCameraShutdown() {
     
   } catch (error) {
     console.error('💥 NUCLEAR SHUTDOWN ERROR:', error);
-    // Continue anyway to ensure some cleanup happens
   }
 }
 

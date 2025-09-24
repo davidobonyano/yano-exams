@@ -44,10 +44,10 @@ export default function DeleteExamModal({
         
         <div className="py-4">
           <p className="text-sm text-gray-600 mb-4">
-            Are you sure you want to delete the exam:
+            Are you sure you want to delete this exam?
           </p>
           <p className="font-semibold text-gray-900 mb-4">
-            "{examTitle}"
+            {examTitle}
           </p>
           <div className="bg-red-50 border border-red-200 rounded-md p-3">
             <p className="text-sm text-red-800">
